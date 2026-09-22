@@ -1,3 +1,4 @@
+
 from pathlib import Path
 import uuid
 
@@ -42,8 +43,9 @@ def detect_birds(request):
         )
 
     # Seuil choisi par l'utilisateur
+    # Par défaut : 70 %
     try:
-        confidence = float(request.data.get("confidence", 0.60))
+        confidence = float(request.data.get("confidence", 0.70))
     except (TypeError, ValueError):
         return Response(
             {"error": "Seuil de confiance invalide."},
@@ -61,14 +63,20 @@ def detect_birds(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Créer les dossiers
+    # ============================================
+    # CRÉER LES DOSSIERS
+    # ============================================
+
     upload_directory = Path(settings.MEDIA_ROOT) / "uploads"
     result_directory = Path(settings.MEDIA_ROOT) / "results"
 
     upload_directory.mkdir(parents=True, exist_ok=True)
     result_directory.mkdir(parents=True, exist_ok=True)
 
-    # Nom unique
+    # ============================================
+    # VÉRIFICATION DU FORMAT
+    # ============================================
+
     extension = Path(image.name).suffix.lower()
 
     if extension not in [".jpg", ".jpeg", ".png"]:
@@ -77,11 +85,18 @@ def detect_birds(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    # ============================================
+    # NOM UNIQUE
+    # ============================================
+
     filename = f"{uuid.uuid4()}{extension}"
 
     input_path = upload_directory / filename
 
-    # Enregistrer l'image reçue
+    # ============================================
+    # ENREGISTRER L'IMAGE REÇUE
+    # ============================================
+
     with open(input_path, "wb+") as destination:
         for chunk in image.chunks():
             destination.write(chunk)
@@ -100,7 +115,10 @@ def detect_birds(request):
 
     detections = []
 
-    # Dessiner le résultat
+    # ============================================
+    # DESSINER LE RÉSULTAT
+    # ============================================
+
     annotated_image = result.plot()
 
     output_path = result_directory / filename
@@ -135,12 +153,16 @@ def detect_birds(request):
         })
 
     # ============================================
-    # RÉPONSE
+    # URL DE L'IMAGE RÉSULTAT
     # ============================================
 
     result_url = request.build_absolute_uri(
         settings.MEDIA_URL + "results/" + filename
     )
+
+    # ============================================
+    # RÉPONSE API
+    # ============================================
 
     return Response({
         "success": True,
