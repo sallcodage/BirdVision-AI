@@ -1,37 +1,35 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 
 function App() {
-  // ======================================================
-  // ÉTATS
-  // ======================================================
-
-  // Image sélectionnée par l'utilisateur
   const [image, setImage] = useState(null);
-
-  // Aperçu local de l'image
   const [preview, setPreview] = useState(null);
 
-  // Résultat retourné par Django
   const [result, setResult] = useState(null);
-
-  // État de chargement pendant l'analyse
   const [loading, setLoading] = useState(false);
-
-  // Message d'erreur
   const [error, setError] = useState("");
 
+  // ======================================================
+  // NETTOYAGE DE L'APERÇU
+  // ======================================================
+
+  useEffect(() => {
+    return () => {
+      if (preview) {
+        URL.revokeObjectURL(preview);
+      }
+    };
+  }, [preview]);
 
   // ======================================================
   // SÉLECTION D'UNE IMAGE
   // ======================================================
 
   const handleImageChange = (event) => {
-    const file = event.target.files[0];
+    const file = event.target.files?.[0];
 
     if (!file) return;
 
-    // Vérification du type de fichier
     const allowedTypes = ["image/jpeg", "image/png"];
 
     if (!allowedTypes.includes(file.type)) {
@@ -39,8 +37,6 @@ function App() {
       return;
     }
 
-    // Supprimer l'ancien aperçu pour éviter de garder
-    // inutilement l'ancienne URL en mémoire
     if (preview) {
       URL.revokeObjectURL(preview);
     }
@@ -48,14 +44,12 @@ function App() {
     setImage(file);
     setPreview(URL.createObjectURL(file));
 
-    // Réinitialiser les anciens résultats
     setResult(null);
     setError("");
   };
 
-
   // ======================================================
-  // ENVOI DE L'IMAGE À DJANGO
+  // DÉTECTION
   // ======================================================
 
   const handleDetect = async () => {
@@ -68,12 +62,9 @@ function App() {
     setError("");
     setResult(null);
 
-    // Création des données envoyées à Django
     const formData = new FormData();
 
     formData.append("image", image);
-
-    // Seuil de confiance fixé à 70 %
     formData.append("confidence", "0.70");
 
     try {
@@ -85,10 +76,16 @@ function App() {
         }
       );
 
-      // Récupération de la réponse Django
-      const data = await response.json();
+      let data;
 
-      // Si Django retourne une erreur
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error(
+          "Le serveur a retourné une réponse invalide."
+        );
+      }
+
       if (!response.ok) {
         throw new Error(
           data.error ||
@@ -96,20 +93,40 @@ function App() {
         );
       }
 
-      // Enregistrer le résultat
       setResult(data);
     } catch (err) {
       console.error("Erreur BirdVision :", err);
 
-      setError(
-        err.message ||
-          "Impossible de communiquer avec le serveur BirdVision."
-      );
+      if (err instanceof TypeError) {
+        setError(
+          "Impossible de communiquer avec le serveur BirdVision. Vérifiez que Django est démarré."
+        );
+      } else {
+        setError(
+          err.message ||
+            "Une erreur est survenue pendant l'analyse."
+        );
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  // ======================================================
+  // ANALYSER UNE AUTRE IMAGE
+  // ======================================================
+
+  const handleReset = () => {
+    if (preview) {
+      URL.revokeObjectURL(preview);
+    }
+
+    setImage(null);
+    setPreview(null);
+    setResult(null);
+    setError("");
+    setLoading(false);
+  };
 
   // ======================================================
   // INTERFACE
@@ -117,17 +134,11 @@ function App() {
 
   return (
     <div className="app">
-
-      {/* ==================================================
-          BARRE DE NAVIGATION
-      ================================================== */}
+      {/* NAVIGATION */}
 
       <header className="navbar">
         <div className="brand">
-
-          <div className="logo">
-            B
-          </div>
+          <div className="logo">B</div>
 
           <div>
             <h1>BirdVision IA</h1>
@@ -136,7 +147,6 @@ function App() {
               Intelligence artificielle pour la détection d'oiseaux
             </span>
           </div>
-
         </div>
 
         <div className="status">
@@ -145,19 +155,12 @@ function App() {
         </div>
       </header>
 
-
-      {/* ==================================================
-          CONTENU PRINCIPAL
-      ================================================== */}
+      {/* CONTENU */}
 
       <main className="container">
-
-        {/* ==================================================
-            PRÉSENTATION
-        ================================================== */}
+        {/* HERO */}
 
         <section className="hero">
-
           <span className="badge">
             VISION PAR ORDINATEUR
           </span>
@@ -173,311 +176,284 @@ function App() {
 
           <p>
             Importez une image et BirdVision IA analysera
-            automatiquement son contenu afin de localiser
-            les oiseaux présents.
+            automatiquement son contenu afin de localiser les
+            oiseaux présents.
           </p>
-
         </section>
 
-
-        {/* ==================================================
-            ESPACE DE TRAVAIL
-        ================================================== */}
+        {/* ESPACE DE TRAVAIL */}
 
         <section className="workspace">
-
-          {/* ==================================================
-              IMPORTATION DE L'IMAGE
-          ================================================== */}
+          {/* IMPORTATION */}
 
           <div className="upload-card">
-
             <div className="card-header">
-
               <div>
-                <p className="step">
-                  ÉTAPE 01
-                </p>
-
-                <h3>
-                  Importer une image
-                </h3>
+                <p className="step">ÉTAPE 01</p>
+                <h3>Importer une image</h3>
               </div>
 
               <span className="confidence">
                 Confiance : 70 %
               </span>
-
             </div>
 
-
-            {/* Zone d'importation */}
+            {/* ZONE IMAGE */}
 
             <label
               className={`drop-zone ${
                 preview ? "has-image" : ""
               }`}
             >
-
               {preview ? (
-
                 <img
                   src={preview}
                   alt="Aperçu sélectionné"
                   className="preview-image"
                 />
-
               ) : (
-
                 <div className="upload-content">
+                  <div className="upload-icon">↑</div>
 
-                  <div className="upload-icon">
-                    ↑
-                  </div>
-
-                  <h4>
-                    Sélectionnez une image
-                  </h4>
+                  <h4>Sélectionnez une image</h4>
 
                   <p>
                     Importez une photographie pour lancer
                     l'analyse.
                   </p>
 
-                  <span>
-                    JPG, JPEG ou PNG
-                  </span>
-
+                  <span>JPG, JPEG ou PNG</span>
                 </div>
-
               )}
 
               <input
                 type="file"
                 accept="image/png,image/jpeg"
                 onChange={handleImageChange}
+                disabled={loading}
                 hidden
               />
-
             </label>
 
-
-            {/* Informations sur le fichier */}
+            {/* INFORMATIONS IMAGE */}
 
             {image && (
-
               <div className="file-info">
-
                 <div>
-
-                  <strong>
-                    {image.name}
-                  </strong>
+                  <strong>{image.name}</strong>
 
                   <span>
                     {(image.size / 1024 / 1024).toFixed(2)} MB
                   </span>
-
                 </div>
 
+                {!loading && (
+                  <label className="change-button">
+                    Changer l'image
 
-                <label className="change-button">
-
-                  Changer l'image
-
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    onChange={handleImageChange}
-                    hidden
-                  />
-
-                </label>
-
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      onChange={handleImageChange}
+                      hidden
+                    />
+                  </label>
+                )}
               </div>
-
             )}
 
-
-            {/* Bouton de détection */}
+            {/* BOUTON DÉTECTION */}
 
             <button
               className="detect-button"
               onClick={handleDetect}
               disabled={!image || loading}
             >
-
               {loading
                 ? "Analyse en cours..."
                 : "Détecter les oiseaux"}
-
             </button>
 
+            {/* NOUVELLE ANALYSE */}
+
+            {(result || error) && !loading && (
+              <button
+                className="reset-button"
+                onClick={handleReset}
+              >
+                Analyser une autre image
+              </button>
+            )}
           </div>
 
-
-          {/* ==================================================
-              RÉSULTAT
-          ================================================== */}
+          {/* RÉSULTAT */}
 
           <div className="result-card">
-
             <div className="card-header">
-
               <div>
-
-                <p className="step">
-                  ÉTAPE 02
-                </p>
-
-                <h3>
-                  Résultat de l'analyse
-                </h3>
-
+                <p className="step">ÉTAPE 02</p>
+                <h3>Résultat de l'analyse</h3>
               </div>
 
+              {result && (
+                <span className="analysis-status">
+                  Analyse terminée
+                </span>
+              )}
             </div>
 
+            {/* CHARGEMENT */}
 
-            {/* ==================================================
-                ERREUR
-            ================================================== */}
+            {loading && (
+              <div className="loading-result">
+                <div className="loader"></div>
 
-            {error && (
-
-              <div className="error-message">
-
-                <strong>
-                  Une erreur est survenue
-                </strong>
+                <h4>Analyse en cours</h4>
 
                 <p>
-                  {error}
+                  RT-DETR-X recherche les oiseaux présents dans
+                  votre image.
                 </p>
 
+                <span>
+                  Cette opération peut prendre quelques secondes.
+                </span>
               </div>
-
             )}
 
+            {/* ERREUR */}
 
-            {/* ==================================================
-                RÉSULTAT DISPONIBLE
-            ================================================== */}
+            {!loading && error && (
+              <div className="error-message">
+                <div className="error-icon">!</div>
 
-            {result ? (
+                <strong>Une erreur est survenue</strong>
 
-              <div className="result-content">
-
-                <img
-                  src={result.result_image}
-                  alt="Résultat de la détection des oiseaux"
-                  className="result-image"
-                />
-
-                <div className="success-message">
-                  Analyse terminée avec succès.
-                </div>
-
+                <p>{error}</p>
               </div>
+            )}
 
-            ) : (
+            {/* AUCUN RÉSULTAT */}
 
-              /* ================================================
-                 AUCUN RÉSULTAT
-              ================================================ */
+            {!loading && !error && !result && (
+              <div className="empty-result">
+                <div className="scan-icon">◎</div>
 
-              !error && (
+                <h4>En attente d'analyse</h4>
 
-                <div className="empty-result">
+                <p>
+                  Le résultat de la détection apparaîtra ici
+                  après l'analyse de votre image.
+                </p>
+              </div>
+            )}
 
-                  <div className="scan-icon">
+            {/* OISEAUX DÉTECTÉS */}
 
-                    {loading ? "..." : "◎"}
+            {!loading &&
+              !error &&
+              result &&
+              result.bird_count > 0 && (
+                <div className="result-content">
+                  {result.result_image && (
+                    <img
+                      src={result.result_image}
+                      alt="Résultat de la détection"
+                      className="result-image"
+                    />
+                  )}
 
+                  <div className="success-message">
+                    <strong>
+                      {result.bird_count}{" "}
+                      {result.bird_count === 1
+                        ? "oiseau détecté"
+                        : "oiseaux détectés"}
+                    </strong>
+
+                    <span>
+                      Détection réalisée avec un seuil minimum
+                      de 70 %.
+                    </span>
                   </div>
-
-                  <h4>
-
-                    {loading
-                      ? "Analyse en cours..."
-                      : "En attente d'analyse"}
-
-                  </h4>
-
-                  <p>
-
-                    {loading
-                      ? "RT-DETR-X analyse actuellement votre image."
-                      : "Le résultat de la détection apparaîtra ici après l'analyse de votre image."}
-
-                  </p>
-
                 </div>
+              )}
 
-              )
+            {/* AUCUN OISEAU */}
 
-            )}
+            {!loading &&
+              !error &&
+              result &&
+              result.bird_count === 0 && (
+                <div className="no-bird-result">
+                  {result.result_image && (
+                    <img
+                      src={result.result_image}
+                      alt="Image analysée"
+                      className="result-image"
+                    />
+                  )}
 
+                  <div className="no-bird-message">
+                    <div className="no-bird-icon">○</div>
 
-            {/* ==================================================
-                STATISTIQUES
-            ================================================== */}
+                    <h4>Aucun oiseau détecté</h4>
+
+                    <p>
+                      BirdVision IA n'a trouvé aucun oiseau avec
+                      une confiance supérieure ou égale à 70 %.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+            {/* STATISTIQUES */}
 
             <div className="metrics">
-
               <div className="metric">
-
-                <span>
-                  Oiseaux détectés
-                </span>
+                <span>Oiseaux détectés</span>
 
                 <strong>
                   {result ? result.bird_count : "—"}
                 </strong>
-
               </div>
-
 
               <div className="metric">
+                <span>Seuil de confiance</span>
 
-                <span>
-                  Seuil de confiance
-                </span>
-
-                <strong>
-                  70 %
-                </strong>
-
+                <strong>70 %</strong>
               </div>
-
             </div>
 
-
-            {/* ==================================================
-                DÉTAIL DES DÉTECTIONS
-            ================================================== */}
+            {/* DÉTAILS */}
 
             {result &&
               result.detections &&
               result.detections.length > 0 && (
-
                 <div className="detections-list">
+                  <div className="detections-header">
+                    <h4>Détails des détections</h4>
 
-                  <h4>
-                    Détails des détections
-                  </h4>
+                    <span>
+                      {result.detections.length} résultat(s)
+                    </span>
+                  </div>
 
                   {result.detections.map(
                     (detection, index) => (
-
                       <div
                         className="detection-item"
                         key={index}
                       >
+                        <div className="detection-name">
+                          <span className="bird-number">
+                            {index + 1}
+                          </span>
 
-                        <span>
-                          Oiseau {index + 1}
-                        </span>
+                          <span>
+                            Oiseau {index + 1}
+                          </span>
+                        </div>
 
                         <strong>
                           {(
@@ -485,29 +461,18 @@ function App() {
                           ).toFixed(1)}
                           %
                         </strong>
-
                       </div>
-
                     )
                   )}
-
                 </div>
-
               )}
-
           </div>
-
         </section>
-
       </main>
 
-
-      {/* ==================================================
-          PIED DE PAGE
-      ================================================== */}
+      {/* FOOTER */}
 
       <footer>
-
         <p>
           BirdVision IA • Détection intelligente d'oiseaux
         </p>
@@ -515,9 +480,7 @@ function App() {
         <span>
           RT-DETR-X • Django REST • React
         </span>
-
       </footer>
-
     </div>
   );
 }
