@@ -113,37 +113,54 @@ def detect_birds(request):
 
     result = results[0]
 
+    # ============================================
+    # FILTRER ET DESSINER UNIQUEMENT LES OISEAUX
+    # ============================================
+
     detections = []
 
-    # ============================================
-    # DESSINER LE RÉSULTAT
-    # ============================================
-
-    annotated_image = result.plot()
-
-    output_path = result_directory / filename
-
-    cv2.imwrite(str(output_path), annotated_image)
-
-    # ============================================
-    # RÉCUPÉRER UNIQUEMENT LES OISEAUX
-    # ============================================
+    # Charger l'image originale
+    annotated_image = cv2.imread(str(input_path))
 
     for box in result.boxes:
-
         class_id = int(box.cls[0])
         class_name = model.names[class_id]
 
+        # Ignorer toutes les classes sauf "bird"
         if class_name.lower() != "bird":
             continue
 
-        score = float(box.conf[0])
-
+        confidence_score = float(box.conf[0])
         coordinates = box.xyxy[0].tolist()
 
+        x1, y1, x2, y2 = map(int, coordinates)
+
+        # Dessiner uniquement la bounding box de l'oiseau
+        cv2.rectangle(
+            annotated_image,
+            (x1, y1),
+            (x2, y2),
+            (0, 255, 0),
+            2
+        )
+
+        # Texte affiché sur la boîte
+        label = f"Bird {confidence_score * 100:.1f}%"
+
+        cv2.putText(
+            annotated_image,
+            label,
+            (x1, max(y1 - 10, 20)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 0),
+            2
+        )
+
+        # Ajouter la détection dans le JSON
         detections.append({
             "class": "bird",
-            "confidence": round(score, 4),
+            "confidence": round(confidence_score, 4),
             "box": {
                 "x1": round(coordinates[0], 2),
                 "y1": round(coordinates[1], 2),
@@ -151,6 +168,17 @@ def detect_birds(request):
                 "y2": round(coordinates[3], 2),
             }
         })
+
+    # ============================================
+    # ENREGISTRER L'IMAGE RÉSULTAT
+    # ============================================
+
+    output_path = result_directory / filename
+
+    cv2.imwrite(
+        str(output_path),
+        annotated_image
+    )
 
     # ============================================
     # URL DE L'IMAGE RÉSULTAT
@@ -171,3 +199,4 @@ def detect_birds(request):
         "detections": detections,
         "result_image": result_url
     })
+
