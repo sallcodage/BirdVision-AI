@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
+
 import birdVisionLogo from "./assets/birdvision-logo.png";
+
 import Login from "./pages/Login";
+
 import SplashScreen from "./pages/SplashScreen";
+
 import "./App.css";
+
 
 function App() {
   /* ======================================================
@@ -11,22 +16,30 @@ function App() {
 
   const [showSplash, setShowSplash] = useState(true);
 
+
   /* ======================================================
      AUTHENTIFICATION
      ====================================================== */
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   const [currentUser, setCurrentUser] = useState(null);
+
 
   /* ======================================================
      DÉTECTION
      ====================================================== */
 
   const [image, setImage] = useState(null);
+
   const [preview, setPreview] = useState(null);
+
   const [result, setResult] = useState(null);
+
   const [loading, setLoading] = useState(false);
+
   const [error, setError] = useState("");
+
 
   /* ======================================================
      PARAMÈTRES IA
@@ -37,6 +50,7 @@ function App() {
 
   const confidenceThreshold = 0.7;
 
+
   /* ======================================================
      NOM DU MODÈLE
      ====================================================== */
@@ -44,7 +58,12 @@ function App() {
   const selectedModelName =
     selectedModel === "rtdetr-x"
       ? "RT-DETR-X"
-      : "YOLO26s";
+      : selectedModel === "yolo26s"
+        ? "YOLO26s"
+        : selectedModel === "dfine-x"
+          ? "D-FINE-X"
+          : "Modèle inconnu";
+
 
   /* ======================================================
      SPLASH SCREEN — 5 SECONDES
@@ -60,6 +79,7 @@ function App() {
     };
   }, []);
 
+
   /* ======================================================
      NETTOYAGE DE L'APERÇU
      ====================================================== */
@@ -72,14 +92,17 @@ function App() {
     };
   }, [preview]);
 
+
   /* ======================================================
      CONNEXION
      ====================================================== */
 
   const handleLogin = (userData) => {
     setCurrentUser(userData);
+
     setIsAuthenticated(true);
   };
+
 
   /* ======================================================
      DÉCONNEXION
@@ -89,8 +112,10 @@ function App() {
     handleReset();
 
     setCurrentUser(null);
+
     setIsAuthenticated(false);
   };
+
 
   /* ======================================================
      CHANGEMENT DU MODÈLE
@@ -101,9 +126,12 @@ function App() {
 
     // On efface l'ancien résultat afin de ne pas afficher
     // un résultat provenant d'un autre modèle.
+
     setResult(null);
+
     setError("");
   };
+
 
   /* ======================================================
      SÉLECTION IMAGE
@@ -132,14 +160,18 @@ function App() {
     }
 
     setImage(file);
+
     setPreview(URL.createObjectURL(file));
+
     setResult(null);
+
     setError("");
   };
 
+
   /* ======================================================
      DÉTECTION
-     RT-DETR-X / YOLO26s
+     RT-DETR-X / YOLO26s / D-FINE-X
      ====================================================== */
 
   const handleDetect = async () => {
@@ -152,7 +184,9 @@ function App() {
     }
 
     setLoading(true);
+
     setError("");
+
     setResult(null);
 
     const formData = new FormData();
@@ -162,7 +196,7 @@ function App() {
      *
      * image       = fichier image
      * confidence  = 0.70
-     * model       = rtdetr-x ou yolo26s
+     * model       = rtdetr-x, yolo26s ou dfine-x
      */
 
     formData.append("image", image);
@@ -225,6 +259,7 @@ function App() {
     }
   };
 
+
   /* ======================================================
      NOUVELLE ANALYSE
      ====================================================== */
@@ -235,11 +270,16 @@ function App() {
     }
 
     setImage(null);
+
     setPreview(null);
+
     setResult(null);
+
     setError("");
+
     setLoading(false);
   };
+
 
   /* ======================================================
      CONFIANCE MOYENNE
@@ -258,6 +298,7 @@ function App() {
         ).toFixed(1)
       : null;
 
+
   /* ======================================================
      SPLASH SCREEN
      ====================================================== */
@@ -265,6 +306,7 @@ function App() {
   if (showSplash) {
     return <SplashScreen />;
   }
+
 
   /* ======================================================
      PAGE LOGIN
@@ -277,6 +319,7 @@ function App() {
       />
     );
   }
+
 
   /* ======================================================
      APPLICATION BIRDVISION
@@ -326,6 +369,7 @@ function App() {
 
           </a>
 
+
           {/* NAVIGATION */}
 
           <nav className="nav-links">
@@ -342,6 +386,7 @@ function App() {
             </a>
 
           </nav>
+
 
           {/* PARTIE DROITE */}
 
@@ -364,6 +409,7 @@ function App() {
               </div>
 
             </div>
+
 
             <button
               type="button"
@@ -388,6 +434,7 @@ function App() {
 
       </header>
 
+
       <main>
 
         {/* ==================================================
@@ -410,6 +457,7 @@ function App() {
 
             </div>
 
+
             <h2>
               Détectez les oiseaux avec
               <span>
@@ -418,12 +466,14 @@ function App() {
               </span>
             </h2>
 
+
             <p>
               BirdVision IA utilise des modèles de
               vision par ordinateur pour détecter
               et localiser automatiquement les
               oiseaux présents dans vos images.
             </p>
+
 
             <div className="hero-features">
 
@@ -449,6 +499,7 @@ function App() {
 
               </div>
 
+
               {/* FEATURE 2 */}
 
               <div className="hero-feature">
@@ -470,6 +521,7 @@ function App() {
                 </div>
 
               </div>
+
 
               {/* FEATURE 3 */}
 
@@ -498,6 +550,7 @@ function App() {
           </div>
 
         </section>
+
 
         {/* ==================================================
             ESPACE ANALYSE
@@ -531,6 +584,7 @@ function App() {
 
             </div>
 
+
             <div className="analysis-badge">
 
               <span></span>
@@ -541,11 +595,13 @@ function App() {
 
           </div>
 
+
           {/* ==================================================
               WORKSPACE
               ================================================== */}
 
           <div className="workspace">
+
 
             {/* ==================================================
                 IMAGE SOURCE
@@ -575,11 +631,13 @@ function App() {
 
                 </div>
 
+
                 <span className="file-type-badge">
                   JPG / PNG
                 </span>
 
               </div>
+
 
               {/* DROP ZONE */}
 
@@ -611,6 +669,7 @@ function App() {
 
                   </>
                 ) : (
+
                   <div className="upload-placeholder">
 
                     <div className="upload-icon">
@@ -638,6 +697,7 @@ function App() {
                   </div>
                 )}
 
+
                 <input
                   type="file"
                   accept="image/png,image/jpeg"
@@ -648,9 +708,11 @@ function App() {
 
               </label>
 
+
               {/* FICHIER SÉLECTIONNÉ */}
 
               {image && (
+
                 <div className="selected-file">
 
                   <div className="file-icon">
@@ -675,7 +737,9 @@ function App() {
 
                   </div>
 
+
                   {!loading && (
+
                     <label className="change-file">
 
                       Modifier
@@ -694,6 +758,7 @@ function App() {
 
                 </div>
               )}
+
 
               {/* ==================================================
                   PARAMÈTRES D'ANALYSE
@@ -721,11 +786,13 @@ function App() {
 
                 </div>
 
+
                 <div className="model-select-wrapper">
 
                   <label htmlFor="model-select">
                     Choisir le modèle
                   </label>
+
 
                   <select
                     id="model-select"
@@ -742,9 +809,14 @@ function App() {
                       YOLO26s
                     </option>
 
+                    <option value="dfine-x">
+                      D-FINE-X
+                    </option>
+
                   </select>
 
                 </div>
+
 
                 <div className="selected-model-info">
 
@@ -767,6 +839,7 @@ function App() {
                 </div>
 
               </div>
+
 
               {/* BOUTON ANALYSER */}
 
@@ -807,10 +880,12 @@ function App() {
 
               </button>
 
+
               {/* NOUVELLE ANALYSE */}
 
               {(result || error) &&
                 !loading && (
+
                   <button
                     className="secondary-button"
                     onClick={handleReset}
@@ -820,6 +895,7 @@ function App() {
                 )}
 
             </article>
+
 
             {/* ==================================================
                 RÉSULTAT
@@ -849,7 +925,9 @@ function App() {
 
                 </div>
 
+
                 {result ? (
+
                   <span className="complete-badge">
 
                     <span>
@@ -859,21 +937,27 @@ function App() {
                     Terminée
 
                   </span>
+
                 ) : (
+
                   <span className="waiting-badge">
                     En attente
                   </span>
+
                 )}
 
               </div>
 
+
               <div className="result-view">
+
 
                 {/* ============================================
                     CHARGEMENT
                     ============================================ */}
 
                 {loading && (
+
                   <div className="loading-state">
 
                     <div className="scanner">
@@ -889,6 +973,7 @@ function App() {
                       <div className="scanner-ring"></div>
 
                     </div>
+
 
                     <h4>
                       Analyse intelligente en cours
@@ -913,12 +998,14 @@ function App() {
                   </div>
                 )}
 
+
                 {/* ============================================
                     ERREUR
                     ============================================ */}
 
                 {!loading &&
                   error && (
+
                     <div className="error-state">
 
                       <div className="state-icon error-state-icon">
@@ -936,6 +1023,7 @@ function App() {
                     </div>
                   )}
 
+
                 {/* ============================================
                     EN ATTENTE
                     ============================================ */}
@@ -943,6 +1031,7 @@ function App() {
                 {!loading &&
                   !error &&
                   !result && (
+
                     <div className="empty-state">
 
                       <div className="empty-visual">
@@ -976,6 +1065,7 @@ function App() {
                     </div>
                   )}
 
+
                 {/* ============================================
                     RÉSULTAT
                     ============================================ */}
@@ -986,6 +1076,7 @@ function App() {
                     <>
 
                       {result.result_image && (
+
                         <div className="result-image-wrapper">
 
                           <img
@@ -1008,7 +1099,9 @@ function App() {
                         </div>
                       )}
 
+
                       {result.bird_count > 0 ? (
+
                         <div className="result-message success-result">
 
                           <div className="result-message-icon">
@@ -1042,7 +1135,9 @@ function App() {
                           </div>
 
                         </div>
+
                       ) : (
+
                         <div className="result-message neutral-result">
 
                           <div className="result-message-icon">
@@ -1077,6 +1172,7 @@ function App() {
 
           </div>
 
+
           {/* ==================================================
               STATISTIQUES
               ================================================== */}
@@ -1107,6 +1203,7 @@ function App() {
 
             </div>
 
+
             {/* CONFIANCE */}
 
             <div className="stat-card">
@@ -1131,6 +1228,7 @@ function App() {
 
             </div>
 
+
             {/* MODÈLE */}
 
             <div className="stat-card">
@@ -1152,6 +1250,7 @@ function App() {
               </div>
 
             </div>
+
 
             {/* SEUIL */}
 
@@ -1177,12 +1276,14 @@ function App() {
 
           </div>
 
+
           {/* ==================================================
               DÉTAILS DES DÉTECTIONS
               ================================================== */}
 
           {result?.detections?.length >
             0 && (
+
             <section className="detection-details">
 
               <div className="details-heading">
@@ -1199,6 +1300,7 @@ function App() {
 
                 </div>
 
+
                 <span className="detection-count">
 
                   {
@@ -1212,6 +1314,7 @@ function App() {
 
               </div>
 
+
               <div className="detections-grid">
 
                 {result.detections.map(
@@ -1219,6 +1322,7 @@ function App() {
                     detection,
                     index
                   ) => (
+
                     <div
                       className="detection-card"
                       key={index}
@@ -1235,6 +1339,7 @@ function App() {
 
                       </div>
 
+
                       <div className="detection-info">
 
                         <strong>
@@ -1247,6 +1352,7 @@ function App() {
                         </span>
 
                       </div>
+
 
                       <div className="confidence-value">
 
@@ -1278,6 +1384,7 @@ function App() {
 
         </section>
 
+
         {/* ==================================================
             TECHNOLOGIE
             ================================================== */}
@@ -1300,6 +1407,7 @@ function App() {
 
           </div>
 
+
           <div className="tech-stack">
 
             <span>
@@ -1308,6 +1416,10 @@ function App() {
 
             <span>
               YOLO26s
+            </span>
+
+            <span>
+              D-FINE-X
             </span>
 
             <span>
@@ -1328,6 +1440,7 @@ function App() {
 
       </main>
 
+
       {/* ==================================================
           FOOTER
           ================================================== */}
@@ -1347,6 +1460,7 @@ function App() {
 
             </div>
 
+
             <div>
 
               <strong>
@@ -1362,9 +1476,10 @@ function App() {
 
           </div>
 
+
           <p>
             Computer Vision • RT-DETR-X •
-            YOLO26s • Django REST • React
+            YOLO26s • D-FINE-X • Django REST • React
           </p>
 
         </div>
@@ -1374,5 +1489,6 @@ function App() {
     </div>
   );
 }
+
 
 export default App;
