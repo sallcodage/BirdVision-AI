@@ -1,4 +1,3 @@
-
 from pathlib import Path
 import uuid
 
@@ -9,22 +8,55 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 
-from ultralytics import RTDETR
+from ultralytics import RTDETR, YOLO
+from .dfine_model import DfineModel
 
 
 # ============================================
-# MODÈLE RT-DETR
+# CONFIGURATION DES MODÈLES
 # ============================================
 
 PROJECT_ROOT = Path(settings.BASE_DIR).parent
 
-MODEL_PATH = PROJECT_ROOT / "models" / "rtdetr-x.pt"
+MODEL_CONFIG = {
+    "rtdetr-x": {
+        "path": PROJECT_ROOT / "models" / "rtdetr-x.pt",
+        "type": "rtdetr",
+    },
+    "yolo26s": {
+        "path": PROJECT_ROOT / "models" / "yolo26s.pt",
+        "type": "yolo",
+    },
+    "dfine-x": {
+        "path": PROJECT_ROOT / "models" / "dfine_x_coco.pth",
+        "type": "dfine",
+    },
+}
+
+
+# ============================================
+# CHARGEMENT DES MODÈLES
+# ============================================
+
+print("Chargement des modèles BirdVision AI...")
+
+models = {}
 
 print("Chargement de RT-DETR-X...")
-
-model = RTDETR(str(MODEL_PATH))
-
+models["rtdetr-x"] = RTDETR(
+    str(MODEL_CONFIG["rtdetr-x"]["path"])
+)
 print("RT-DETR-X chargé avec succès !")
+
+print("Chargement de YOLO26s...")
+models["yolo26s"] = YOLO(
+    str(MODEL_CONFIG["yolo26s"]["path"])
+)
+print("YOLO26s chargé avec succès !")
+
+print("Chargement de D-FINE-X...")
+models["dfine-x"] = DfineModel()
+print("D-FINE-X chargé avec succès !")
 
 
 # ============================================
@@ -42,100 +74,214 @@ def detect_birds(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Seuil choisi par l'utilisateur
-    # Par défaut : 70 %
+    # ========================================
+    # MODÈLE CHOISI
+    # ========================================
+
+    model_name = request.data.get("model", "rtdetr-x").lower()
+
+    if model_name not in MODEL_CONFIG:
+        return Response(
+            {
+                "error": "Modèle invalide.",
+                "available_models": [
+                    "rtdetr-x",
+                    "yolo26s",
+                    "dfine-x"
+                ]
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    model = models[model_name]
+
+    # ========================================
+    # SEUIL DE CONFIANCE
+    # ========================================
+
     try:
-        confidence = float(request.data.get("confidence", 0.70))
+        confidence = float(
+            request.data.get("confidence", 0.70)
+        )
     except (TypeError, ValueError):
         return Response(
             {"error": "Seuil de confiance invalide."},
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # BirdVision accepte uniquement 50 %, 60 % ou 70 %
+    # BirdVision accepte uniquement
+    # 50 %, 60 % ou 70 %
     allowed_confidences = [0.50, 0.60, 0.70]
 
     if confidence not in allowed_confidences:
         return Response(
             {
-                "error": "Le seuil doit être 0.50, 0.60 ou 0.70."
+                "error": (
+                    "Le seuil doit être 0.50, "
+                    "0.60 ou 0.70."
+                )
             },
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # ============================================
-    # CRÉER LES DOSSIERS
-    # ============================================
+    # ========================================
+    # DOSSIERS
+    # ========================================
 
-    upload_directory = Path(settings.MEDIA_ROOT) / "uploads"
-    result_directory = Path(settings.MEDIA_ROOT) / "results"
+    upload_directory = (
+        Path(settings.MEDIA_ROOT) / "uploads"
+    )
 
-    upload_directory.mkdir(parents=True, exist_ok=True)
-    result_directory.mkdir(parents=True, exist_ok=True)
+    result_directory = (
+        Path(settings.MEDIA_ROOT) / "results"
+    )
 
-    # ============================================
-    # VÉRIFICATION DU FORMAT
-    # ============================================
+    upload_directory.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    result_directory.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    # ========================================
+    # FORMAT DE L'IMAGE
+    # ========================================
 
     extension = Path(image.name).suffix.lower()
 
     if extension not in [".jpg", ".jpeg", ".png"]:
         return Response(
-            {"error": "Format accepté : JPG, JPEG ou PNG."},
+            {
+                "error": (
+                    "Format accepté : "
+                    "JPG, JPEG ou PNG."
+                )
+            },
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # ============================================
+    # ========================================
     # NOM UNIQUE
-    # ============================================
+    # ========================================
 
     filename = f"{uuid.uuid4()}{extension}"
 
     input_path = upload_directory / filename
 
-    # ============================================
-    # ENREGISTRER L'IMAGE REÇUE
-    # ============================================
+    # ========================================
+    # ENREGISTRER L'IMAGE
+    # ========================================
 
     with open(input_path, "wb+") as destination:
         for chunk in image.chunks():
             destination.write(chunk)
 
-    # ============================================
-    # DÉTECTION RT-DETR
-    # ============================================
+    # ========================================
+    # D-FINE-X
+    # ========================================
 
-    results = model.predict(
-        source=str(input_path),
-        conf=confidence,
-        verbose=False
-    )
+    if model_name == "dfine-x":
+        output_path = result_directory / filename
+
+        try:
+            dfine_result = model.predict(
+                image_path=str(input_path),
+                confidence=confidence,
+                save_path=str(output_path)
+            )
+        except Exception as error:
+            return Response(
+                {
+                    "error": "Erreur pendant la détection D-FINE-X.",
+                    "details": str(error)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        result_url = request.build_absolute_uri(
+            settings.MEDIA_URL + "results/" + filename
+        )
+
+        return Response(
+            {
+                "success": True,
+                "model": model_name,
+                "bird_count": dfine_result["bird_count"],
+                "confidence_threshold": confidence,
+                "detections": dfine_result["detections"],
+                "result_image": result_url
+            }
+        )
+
+    # ========================================
+    # DÉTECTION
+    # ========================================
+
+    try:
+        results = model.predict(
+            source=str(input_path),
+            conf=0.50,
+            imgsz=1280,
+            verbose=False
+        )
+    except Exception as error:
+        return Response(
+            {
+                "error": "Erreur pendant la détection.",
+                "details": str(error)
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
     result = results[0]
 
-    # ============================================
-    # FILTRER ET DESSINER UNIQUEMENT LES OISEAUX
-    # ============================================
+    # ========================================
+    # DÉTECTIONS
+    # ========================================
 
     detections = []
 
-    # Charger l'image originale
-    annotated_image = cv2.imread(str(input_path))
+    annotated_image = cv2.imread(
+        str(input_path)
+    )
+
+    # ========================================
+    # PARCOURIR LES BOUNDING BOXES
+    # ========================================
 
     for box in result.boxes:
+
         class_id = int(box.cls[0])
+
+        # Récupérer le nom de la classe
         class_name = model.names[class_id]
 
-        # Ignorer toutes les classes sauf "bird"
+        # Garder uniquement les oiseaux
         if class_name.lower() != "bird":
             continue
 
-        confidence_score = float(box.conf[0])
+        confidence_score = float(
+            box.conf[0]
+        )
+
+        # Respecter le seuil choisi
+        if confidence_score < confidence:
+            continue
+
         coordinates = box.xyxy[0].tolist()
 
-        x1, y1, x2, y2 = map(int, coordinates)
+        x1, y1, x2, y2 = map(
+            int,
+            coordinates
+        )
 
-        # Dessiner uniquement la bounding box de l'oiseau
+        # ====================================
+        # DESSINER LA BOUNDING BOX
+        # ====================================
+
         cv2.rectangle(
             annotated_image,
             (x1, y1),
@@ -144,8 +290,10 @@ def detect_birds(request):
             2
         )
 
-        # Texte affiché sur la boîte
-        label = f"Bird {confidence_score * 100:.1f}%"
+        label = (
+            f"Bird "
+            f"{confidence_score * 100:.1f}%"
+        )
 
         cv2.putText(
             annotated_image,
@@ -157,46 +305,72 @@ def detect_birds(request):
             2
         )
 
-        # Ajouter la détection dans le JSON
-        detections.append({
-            "class": "bird",
-            "confidence": round(confidence_score, 4),
-            "box": {
-                "x1": round(coordinates[0], 2),
-                "y1": round(coordinates[1], 2),
-                "x2": round(coordinates[2], 2),
-                "y2": round(coordinates[3], 2),
+        # ====================================
+        # AJOUTER AU JSON
+        # ====================================
+
+        detections.append(
+            {
+                "class": "bird",
+                "confidence": round(
+                    confidence_score,
+                    4
+                ),
+                "box": {
+                    "x1": round(
+                        coordinates[0],
+                        2
+                    ),
+                    "y1": round(
+                        coordinates[1],
+                        2
+                    ),
+                    "x2": round(
+                        coordinates[2],
+                        2
+                    ),
+                    "y2": round(
+                        coordinates[3],
+                        2
+                    ),
+                }
             }
-        })
+        )
 
-    # ============================================
+    # ========================================
     # ENREGISTRER L'IMAGE RÉSULTAT
-    # ============================================
+    # ========================================
 
-    output_path = result_directory / filename
+    output_path = (
+        result_directory / filename
+    )
 
     cv2.imwrite(
         str(output_path),
         annotated_image
     )
 
-    # ============================================
+    # ========================================
     # URL DE L'IMAGE RÉSULTAT
-    # ============================================
+    # ========================================
 
     result_url = request.build_absolute_uri(
-        settings.MEDIA_URL + "results/" + filename
+        settings.MEDIA_URL
+        + "results/"
+        + filename
     )
 
-    # ============================================
+    # ========================================
     # RÉPONSE API
-    # ============================================
+    # ========================================
 
-    return Response({
-        "success": True,
-        "bird_count": len(detections),
-        "confidence_threshold": confidence,
-        "detections": detections,
-        "result_image": result_url
-    })
-
+    return Response(
+        {
+            "success": True,
+            "model": model_name,
+            "bird_count": len(detections),
+            "confidence_threshold": confidence,
+            "detections": detections,
+            "result_image": result_url
+        }
+    )
