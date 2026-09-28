@@ -1,17 +1,68 @@
 import { useEffect, useState } from "react";
+import birdVisionLogo from "./assets/birdvision-logo.png";
+import Login from "./pages/Login";
+import SplashScreen from "./pages/SplashScreen";
 import "./App.css";
 
 function App() {
+  /* ======================================================
+     SPLASH SCREEN
+     ====================================================== */
+
+  const [showSplash, setShowSplash] = useState(true);
+
+  /* ======================================================
+     AUTHENTIFICATION
+     ====================================================== */
+
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  /* ======================================================
+     DÉTECTION
+     ====================================================== */
+
   const [image, setImage] = useState(null);
   const [preview, setPreview] = useState(null);
-
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ======================================================
-  // NETTOYAGE DE L'APERÇU
-  // ======================================================
+  /* ======================================================
+     PARAMÈTRES IA
+     ====================================================== */
+
+  const [selectedModel, setSelectedModel] =
+    useState("rtdetr-x");
+
+  const confidenceThreshold = 0.7;
+
+  /* ======================================================
+     NOM DU MODÈLE
+     ====================================================== */
+
+  const selectedModelName =
+    selectedModel === "rtdetr-x"
+      ? "RT-DETR-X"
+      : "YOLO26s";
+
+  /* ======================================================
+     SPLASH SCREEN — 5 SECONDES
+     ====================================================== */
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 5000);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, []);
+
+  /* ======================================================
+     NETTOYAGE DE L'APERÇU
+     ====================================================== */
 
   useEffect(() => {
     return () => {
@@ -21,19 +72,58 @@ function App() {
     };
   }, [preview]);
 
-  // ======================================================
-  // SÉLECTION D'UNE IMAGE
-  // ======================================================
+  /* ======================================================
+     CONNEXION
+     ====================================================== */
+
+  const handleLogin = (userData) => {
+    setCurrentUser(userData);
+    setIsAuthenticated(true);
+  };
+
+  /* ======================================================
+     DÉCONNEXION
+     ====================================================== */
+
+  const handleLogout = () => {
+    handleReset();
+
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+  };
+
+  /* ======================================================
+     CHANGEMENT DU MODÈLE
+     ====================================================== */
+
+  const handleModelChange = (event) => {
+    setSelectedModel(event.target.value);
+
+    // On efface l'ancien résultat afin de ne pas afficher
+    // un résultat provenant d'un autre modèle.
+    setResult(null);
+    setError("");
+  };
+
+  /* ======================================================
+     SÉLECTION IMAGE
+     ====================================================== */
 
   const handleImageChange = (event) => {
     const file = event.target.files?.[0];
 
     if (!file) return;
 
-    const allowedTypes = ["image/jpeg", "image/png"];
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+    ];
 
     if (!allowedTypes.includes(file.type)) {
-      setError("Veuillez sélectionner une image JPG, JPEG ou PNG.");
+      setError(
+        "Veuillez sélectionner une image JPG, JPEG ou PNG."
+      );
+
       return;
     }
 
@@ -43,18 +133,21 @@ function App() {
 
     setImage(file);
     setPreview(URL.createObjectURL(file));
-
     setResult(null);
     setError("");
   };
 
-  // ======================================================
-  // DÉTECTION
-  // ======================================================
+  /* ======================================================
+     DÉTECTION
+     RT-DETR-X / YOLO26s
+     ====================================================== */
 
   const handleDetect = async () => {
     if (!image) {
-      setError("Veuillez sélectionner une image.");
+      setError(
+        "Veuillez sélectionner une image."
+      );
+
       return;
     }
 
@@ -64,8 +157,25 @@ function App() {
 
     const formData = new FormData();
 
+    /*
+     * Données envoyées au backend Django :
+     *
+     * image       = fichier image
+     * confidence  = 0.70
+     * model       = rtdetr-x ou yolo26s
+     */
+
     formData.append("image", image);
-    formData.append("confidence", "0.70");
+
+    formData.append(
+      "confidence",
+      confidenceThreshold.toFixed(2)
+    );
+
+    formData.append(
+      "model",
+      selectedModel
+    );
 
     try {
       const response = await fetch(
@@ -95,7 +205,10 @@ function App() {
 
       setResult(data);
     } catch (err) {
-      console.error("Erreur BirdVision :", err);
+      console.error(
+        "Erreur BirdVision :",
+        err
+      );
 
       if (err instanceof TypeError) {
         setError(
@@ -112,9 +225,9 @@ function App() {
     }
   };
 
-  // ======================================================
-  // ANALYSER UNE AUTRE IMAGE
-  // ======================================================
+  /* ======================================================
+     NOUVELLE ANALYSE
+     ====================================================== */
 
   const handleReset = () => {
     if (preview) {
@@ -128,359 +241,1136 @@ function App() {
     setLoading(false);
   };
 
-  // ======================================================
-  // INTERFACE
-  // ======================================================
+  /* ======================================================
+     CONFIANCE MOYENNE
+     ====================================================== */
+
+  const averageConfidence =
+    result?.detections?.length > 0
+      ? (
+          (result.detections.reduce(
+            (sum, detection) =>
+              sum + detection.confidence,
+            0
+          ) /
+            result.detections.length) *
+          100
+        ).toFixed(1)
+      : null;
+
+  /* ======================================================
+     SPLASH SCREEN
+     ====================================================== */
+
+  if (showSplash) {
+    return <SplashScreen />;
+  }
+
+  /* ======================================================
+     PAGE LOGIN
+     ====================================================== */
+
+  if (!isAuthenticated) {
+    return (
+      <Login
+        onLogin={handleLogin}
+      />
+    );
+  }
+
+  /* ======================================================
+     APPLICATION BIRDVISION
+     ====================================================== */
 
   return (
     <div className="app">
-      {/* NAVIGATION */}
 
-      <header className="navbar">
-        <div className="brand">
-          <div className="logo">B</div>
+      {/* ==================================================
+          NAVIGATION
+          ================================================== */}
 
-          <div>
-            <h1>BirdVision IA</h1>
+      <header className="topbar">
 
-            <span>
-              Intelligence artificielle pour la détection d'oiseaux
-            </span>
-          </div>
-        </div>
+        <div className="nav-container">
 
-        <div className="status">
-          <span className="status-dot"></span>
-          RT-DETR-X
-        </div>
-      </header>
+          {/* LOGO */}
 
-      {/* CONTENU */}
+          <a
+            href="#analyse"
+            className="brand"
+          >
 
-      <main className="container">
-        {/* HERO */}
+            <div className="brand-logo">
 
-        <section className="hero">
-          <span className="badge">
-            VISION PAR ORDINATEUR
-          </span>
+              <img
+                src={birdVisionLogo}
+                alt="Logo BirdVision IA"
+              />
 
-          <h2>
-            Détectez les oiseaux
-            <br />
-
-            <span>
-              grâce à l'intelligence artificielle
-            </span>
-          </h2>
-
-          <p>
-            Importez une image et BirdVision IA analysera
-            automatiquement son contenu afin de localiser les
-            oiseaux présents.
-          </p>
-        </section>
-
-        {/* ESPACE DE TRAVAIL */}
-
-        <section className="workspace">
-          {/* IMPORTATION */}
-
-          <div className="upload-card">
-            <div className="card-header">
-              <div>
-                <p className="step">ÉTAPE 01</p>
-                <h3>Importer une image</h3>
-              </div>
-
-              <span className="confidence">
-                Confiance : 70 %
-              </span>
             </div>
 
-            {/* ZONE IMAGE */}
+            <div className="brand-text">
 
-            <label
-              className={`drop-zone ${
-                preview ? "has-image" : ""
-              }`}
+              <h1>
+                BirdVision{" "}
+                <span className="brand-ia">
+                  IA
+                </span>
+              </h1>
+
+              <span>
+                Intelligence Artificielle
+              </span>
+
+            </div>
+
+          </a>
+
+          {/* NAVIGATION */}
+
+          <nav className="nav-links">
+
+            <a
+              href="#analyse"
+              className="active"
             >
-              {preview ? (
-                <img
-                  src={preview}
-                  alt="Aperçu sélectionné"
-                  className="preview-image"
-                />
-              ) : (
-                <div className="upload-content">
-                  <div className="upload-icon">↑</div>
+              Analyse
+            </a>
 
-                  <h4>Sélectionnez une image</h4>
+            <a href="#technology">
+              Technologie
+            </a>
 
-                  <p>
-                    Importez une photographie pour lancer
-                    l'analyse.
-                  </p>
+          </nav>
 
-                  <span>JPG, JPEG ou PNG</span>
-                </div>
-              )}
+          {/* PARTIE DROITE */}
 
-              <input
-                type="file"
-                accept="image/png,image/jpeg"
-                onChange={handleImageChange}
-                disabled={loading}
-                hidden
-              />
-            </label>
+          <div className="nav-right">
 
-            {/* INFORMATIONS IMAGE */}
+            <div className="system-status">
 
-            {image && (
-              <div className="file-info">
-                <div>
-                  <strong>{image.name}</strong>
+              <span className="status-dot"></span>
 
-                  <span>
-                    {(image.size / 1024 / 1024).toFixed(2)} MB
-                  </span>
-                </div>
+              <div>
 
-                {!loading && (
-                  <label className="change-button">
-                    Changer l'image
+                <strong>
+                  {selectedModelName}
+                </strong>
 
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg"
-                      onChange={handleImageChange}
-                      hidden
-                    />
-                  </label>
-                )}
+                <small>
+                  Modèle sélectionné
+                </small>
+
               </div>
-            )}
 
-            {/* BOUTON DÉTECTION */}
+            </div>
 
             <button
-              className="detect-button"
-              onClick={handleDetect}
-              disabled={!image || loading}
+              type="button"
+              className="logout-button"
+              onClick={handleLogout}
+              title="Se déconnecter"
             >
-              {loading
-                ? "Analyse en cours..."
-                : "Détecter les oiseaux"}
+
+              <span className="logout-icon">
+                ↗
+              </span>
+
+              <span className="logout-text">
+                Déconnexion
+              </span>
+
             </button>
 
-            {/* NOUVELLE ANALYSE */}
-
-            {(result || error) && !loading && (
-              <button
-                className="reset-button"
-                onClick={handleReset}
-              >
-                Analyser une autre image
-              </button>
-            )}
           </div>
 
-          {/* RÉSULTAT */}
+        </div>
 
-          <div className="result-card">
-            <div className="card-header">
-              <div>
-                <p className="step">ÉTAPE 02</p>
-                <h3>Résultat de l'analyse</h3>
-              </div>
+      </header>
 
-              {result && (
-                <span className="analysis-status">
-                  Analyse terminée
-                </span>
-              )}
+      <main>
+
+        {/* ==================================================
+            HERO
+            ================================================== */}
+
+        <section className="hero">
+
+          <div className="hero-glow hero-glow-one"></div>
+
+          <div className="hero-glow hero-glow-two"></div>
+
+          <div className="hero-inner">
+
+            <div className="eyebrow">
+
+              <span className="eyebrow-dot"></span>
+
+              COMPUTER VISION • BIRD DETECTION
+
             </div>
 
-            {/* CHARGEMENT */}
+            <h2>
+              Détectez les oiseaux avec
+              <span>
+                {" "}
+                l'intelligence artificielle.
+              </span>
+            </h2>
 
-            {loading && (
-              <div className="loading-result">
-                <div className="loader"></div>
+            <p>
+              BirdVision IA utilise des modèles de
+              vision par ordinateur pour détecter
+              et localiser automatiquement les
+              oiseaux présents dans vos images.
+            </p>
 
-                <h4>Analyse en cours</h4>
+            <div className="hero-features">
 
-                <p>
-                  RT-DETR-X recherche les oiseaux présents dans
-                  votre image.
-                </p>
+              {/* FEATURE 1 */}
 
-                <span>
-                  Cette opération peut prendre quelques secondes.
+              <div className="hero-feature">
+
+                <span className="feature-icon">
+                  AI
                 </span>
+
+                <div>
+
+                  <strong>
+                    {selectedModelName}
+                  </strong>
+
+                  <small>
+                    Modèle sélectionné
+                  </small>
+
+                </div>
+
               </div>
-            )}
 
-            {/* ERREUR */}
+              {/* FEATURE 2 */}
 
-            {!loading && error && (
-              <div className="error-message">
-                <div className="error-icon">!</div>
+              <div className="hero-feature">
 
-                <strong>Une erreur est survenue</strong>
+                <span className="feature-icon">
+                  70
+                </span>
 
-                <p>{error}</p>
+                <div>
+
+                  <strong>
+                    70 %
+                  </strong>
+
+                  <small>
+                    Seuil de confiance
+                  </small>
+
+                </div>
+
               </div>
-            )}
 
-            {/* AUCUN RÉSULTAT */}
+              {/* FEATURE 3 */}
 
-            {!loading && !error && !result && (
-              <div className="empty-result">
-                <div className="scan-icon">◎</div>
+              <div className="hero-feature">
 
-                <h4>En attente d'analyse</h4>
+                <span className="feature-icon">
+                  CV
+                </span>
 
-                <p>
-                  Le résultat de la détection apparaîtra ici
-                  après l'analyse de votre image.
-                </p>
+                <div>
+
+                  <strong>
+                    Computer Vision
+                  </strong>
+
+                  <small>
+                    Analyse intelligente
+                  </small>
+
+                </div>
+
               </div>
-            )}
 
-            {/* OISEAUX DÉTECTÉS */}
+            </div>
 
-            {!loading &&
-              !error &&
-              result &&
-              result.bird_count > 0 && (
-                <div className="result-content">
-                  {result.result_image && (
+          </div>
+
+        </section>
+
+        {/* ==================================================
+            ESPACE ANALYSE
+            ================================================== */}
+
+        <section
+          className="analysis-section"
+          id="analyse"
+        >
+
+          {/* TITRE */}
+
+          <div className="section-heading">
+
+            <div>
+
+              <span className="section-kicker">
+                ESPACE D'ANALYSE
+              </span>
+
+              <h2>
+                Analysez une image
+              </h2>
+
+              <p>
+                Importez une photographie,
+                choisissez votre modèle IA et
+                laissez BirdVision IA rechercher
+                automatiquement les oiseaux.
+              </p>
+
+            </div>
+
+            <div className="analysis-badge">
+
+              <span></span>
+
+              Système prêt
+
+            </div>
+
+          </div>
+
+          {/* ==================================================
+              WORKSPACE
+              ================================================== */}
+
+          <div className="workspace">
+
+            {/* ==================================================
+                IMAGE SOURCE
+                ================================================== */}
+
+            <article className="panel upload-panel">
+
+              <div className="panel-header">
+
+                <div className="panel-title">
+
+                  <span className="step-number">
+                    01
+                  </span>
+
+                  <div>
+
+                    <span className="panel-label">
+                      IMAGE SOURCE
+                    </span>
+
+                    <h3>
+                      Importer une image
+                    </h3>
+
+                  </div>
+
+                </div>
+
+                <span className="file-type-badge">
+                  JPG / PNG
+                </span>
+
+              </div>
+
+              {/* DROP ZONE */}
+
+              <label
+                className={`drop-zone ${
+                  preview
+                    ? "has-image"
+                    : ""
+                }`}
+              >
+
+                {preview ? (
+                  <>
+
                     <img
-                      src={result.result_image}
-                      alt="Résultat de la détection"
-                      className="result-image"
+                      src={preview}
+                      alt="Aperçu sélectionné"
+                      className="preview-image"
                     />
-                  )}
 
-                  <div className="success-message">
+                    <div className="image-overlay">
+
+                      <span>
+                        Cliquer pour remplacer
+                        l'image
+                      </span>
+
+                    </div>
+
+                  </>
+                ) : (
+                  <div className="upload-placeholder">
+
+                    <div className="upload-icon">
+
+                      <span>
+                        ↑
+                      </span>
+
+                    </div>
+
+                    <h4>
+                      Déposez votre image ici
+                    </h4>
+
+                    <p>
+                      Cliquez pour parcourir vos
+                      fichiers et sélectionner une
+                      image à analyser.
+                    </p>
+
+                    <span className="formats">
+                      JPG, JPEG ou PNG
+                    </span>
+
+                  </div>
+                )}
+
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  onChange={handleImageChange}
+                  disabled={loading}
+                  hidden
+                />
+
+              </label>
+
+              {/* FICHIER SÉLECTIONNÉ */}
+
+              {image && (
+                <div className="selected-file">
+
+                  <div className="file-icon">
+                    IMG
+                  </div>
+
+                  <div className="file-details">
+
                     <strong>
-                      {result.bird_count}{" "}
-                      {result.bird_count === 1
-                        ? "oiseau détecté"
-                        : "oiseaux détectés"}
+                      {image.name}
                     </strong>
 
                     <span>
-                      Détection réalisée avec un seuil minimum
-                      de 70 %.
+                      {(
+                        image.size /
+                        1024 /
+                        1024
+                      ).toFixed(2)}
+                      {" MB • "}
+                      Image prête
                     </span>
+
                   </div>
-                </div>
-              )}
 
-            {/* AUCUN OISEAU */}
+                  {!loading && (
+                    <label className="change-file">
 
-            {!loading &&
-              !error &&
-              result &&
-              result.bird_count === 0 && (
-                <div className="no-bird-result">
-                  {result.result_image && (
-                    <img
-                      src={result.result_image}
-                      alt="Image analysée"
-                      className="result-image"
-                    />
+                      Modifier
+
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg"
+                        onChange={
+                          handleImageChange
+                        }
+                        hidden
+                      />
+
+                    </label>
                   )}
 
-                  <div className="no-bird-message">
-                    <div className="no-bird-icon">○</div>
-
-                    <h4>Aucun oiseau détecté</h4>
-
-                    <p>
-                      BirdVision IA n'a trouvé aucun oiseau avec
-                      une confiance supérieure ou égale à 70 %.
-                    </p>
-                  </div>
                 </div>
               )}
 
-            {/* STATISTIQUES */}
+              {/* ==================================================
+                  PARAMÈTRES D'ANALYSE
+                  ================================================== */}
 
-            <div className="metrics">
-              <div className="metric">
-                <span>Oiseaux détectés</span>
+              <div className="model-settings">
 
-                <strong>
-                  {result ? result.bird_count : "—"}
-                </strong>
-              </div>
+                <div className="model-settings-header">
 
-              <div className="metric">
-                <span>Seuil de confiance</span>
+                  <div>
 
-                <strong>70 %</strong>
-              </div>
-            </div>
+                    <span className="panel-label">
+                      PARAMÈTRES D'ANALYSE
+                    </span>
 
-            {/* DÉTAILS */}
+                    <h4>
+                      Modèle de détection
+                    </h4>
 
-            {result &&
-              result.detections &&
-              result.detections.length > 0 && (
-                <div className="detections-list">
-                  <div className="detections-header">
-                    <h4>Détails des détections</h4>
+                  </div>
+
+                  <span className="model-status">
+                    AI
+                  </span>
+
+                </div>
+
+                <div className="model-select-wrapper">
+
+                  <label htmlFor="model-select">
+                    Choisir le modèle
+                  </label>
+
+                  <select
+                    id="model-select"
+                    value={selectedModel}
+                    onChange={handleModelChange}
+                    disabled={loading}
+                  >
+
+                    <option value="rtdetr-x">
+                      RT-DETR-X
+                    </option>
+
+                    <option value="yolo26s">
+                      YOLO26s
+                    </option>
+
+                  </select>
+
+                </div>
+
+                <div className="selected-model-info">
+
+                  <div className="selected-model-icon">
+                    AI
+                  </div>
+
+                  <div>
 
                     <span>
-                      {result.detections.length} résultat(s)
+                      Modèle sélectionné
                     </span>
+
+                    <strong>
+                      {selectedModelName}
+                    </strong>
+
                   </div>
 
-                  {result.detections.map(
-                    (detection, index) => (
-                      <div
-                        className="detection-item"
-                        key={index}
-                      >
-                        <div className="detection-name">
-                          <span className="bird-number">
-                            {index + 1}
-                          </span>
+                </div>
 
-                          <span>
-                            Oiseau {index + 1}
-                          </span>
+              </div>
+
+              {/* BOUTON ANALYSER */}
+
+              <button
+                className="primary-button"
+                onClick={handleDetect}
+                disabled={
+                  !image ||
+                  loading
+                }
+              >
+
+                {loading ? (
+                  <>
+
+                    <span className="button-loader"></span>
+
+                    Analyse avec{" "}
+                    {selectedModelName}...
+
+                  </>
+                ) : (
+                  <>
+
+                    <span className="button-spark">
+                      ✦
+                    </span>
+
+                    Analyser avec{" "}
+                    {selectedModelName}
+
+                    <span className="button-arrow">
+                      →
+                    </span>
+
+                  </>
+                )}
+
+              </button>
+
+              {/* NOUVELLE ANALYSE */}
+
+              {(result || error) &&
+                !loading && (
+                  <button
+                    className="secondary-button"
+                    onClick={handleReset}
+                  >
+                    Nouvelle analyse
+                  </button>
+                )}
+
+            </article>
+
+            {/* ==================================================
+                RÉSULTAT
+                ================================================== */}
+
+            <article className="panel result-panel">
+
+              <div className="panel-header">
+
+                <div className="panel-title">
+
+                  <span className="step-number">
+                    02
+                  </span>
+
+                  <div>
+
+                    <span className="panel-label">
+                      RÉSULTAT IA
+                    </span>
+
+                    <h3>
+                      Résultat de l'analyse
+                    </h3>
+
+                  </div>
+
+                </div>
+
+                {result ? (
+                  <span className="complete-badge">
+
+                    <span>
+                      ✓
+                    </span>
+
+                    Terminée
+
+                  </span>
+                ) : (
+                  <span className="waiting-badge">
+                    En attente
+                  </span>
+                )}
+
+              </div>
+
+              <div className="result-view">
+
+                {/* ============================================
+                    CHARGEMENT
+                    ============================================ */}
+
+                {loading && (
+                  <div className="loading-state">
+
+                    <div className="scanner">
+
+                      <div className="scanner-circle">
+
+                        <span>
+                          AI
+                        </span>
+
+                      </div>
+
+                      <div className="scanner-ring"></div>
+
+                    </div>
+
+                    <h4>
+                      Analyse intelligente en cours
+                    </h4>
+
+                    <p>
+                      {selectedModelName} inspecte
+                      votre image pour localiser les
+                      oiseaux.
+                    </p>
+
+                    <div className="progress-track">
+
+                      <div className="progress-bar"></div>
+
+                    </div>
+
+                    <span className="loading-caption">
+                      Traitement par Computer Vision
+                    </span>
+
+                  </div>
+                )}
+
+                {/* ============================================
+                    ERREUR
+                    ============================================ */}
+
+                {!loading &&
+                  error && (
+                    <div className="error-state">
+
+                      <div className="state-icon error-state-icon">
+                        !
+                      </div>
+
+                      <h4>
+                        Analyse impossible
+                      </h4>
+
+                      <p>
+                        {error}
+                      </p>
+
+                    </div>
+                  )}
+
+                {/* ============================================
+                    EN ATTENTE
+                    ============================================ */}
+
+                {!loading &&
+                  !error &&
+                  !result && (
+                    <div className="empty-state">
+
+                      <div className="empty-visual">
+
+                        <div className="focus-corner corner-one"></div>
+
+                        <div className="focus-corner corner-two"></div>
+
+                        <div className="focus-corner corner-three"></div>
+
+                        <div className="focus-corner corner-four"></div>
+
+                        <span>
+                          AI
+                        </span>
+
+                      </div>
+
+                      <h4>
+                        Prêt pour l'analyse
+                      </h4>
+
+                      <p>
+                        Sélectionnez une image et
+                        choisissez un modèle IA.
+                        Le résultat annoté
+                        apparaîtra ici après
+                        l'analyse.
+                      </p>
+
+                    </div>
+                  )}
+
+                {/* ============================================
+                    RÉSULTAT
+                    ============================================ */}
+
+                {!loading &&
+                  !error &&
+                  result && (
+                    <>
+
+                      {result.result_image && (
+                        <div className="result-image-wrapper">
+
+                          <img
+                            src={
+                              result.result_image
+                            }
+                            alt={`Résultat de la détection ${selectedModelName}`}
+                            className="result-image"
+                          />
+
+                          <div className="result-image-label">
+
+                            <span></span>
+
+                            Détection{" "}
+                            {selectedModelName}
+
+                          </div>
+
                         </div>
+                      )}
+
+                      {result.bird_count > 0 ? (
+                        <div className="result-message success-result">
+
+                          <div className="result-message-icon">
+                            ✓
+                          </div>
+
+                          <div>
+
+                            <strong>
+                              Analyse terminée
+                              avec succès
+                            </strong>
+
+                            <span>
+
+                              {
+                                result.bird_count
+                              }{" "}
+
+                              {result.bird_count ===
+                              1
+                                ? "oiseau a été détecté"
+                                : "oiseaux ont été détectés"}
+
+                              {" avec "}
+
+                              {selectedModelName}.
+
+                            </span>
+
+                          </div>
+
+                        </div>
+                      ) : (
+                        <div className="result-message neutral-result">
+
+                          <div className="result-message-icon">
+                            ○
+                          </div>
+
+                          <div>
+
+                            <strong>
+                              Aucun oiseau détecté
+                            </strong>
+
+                            <span>
+                              Aucun oiseau n'a
+                              atteint le seuil
+                              minimum de confiance
+                              de 70 % avec{" "}
+                              {selectedModelName}.
+                            </span>
+
+                          </div>
+
+                        </div>
+                      )}
+
+                    </>
+                  )}
+
+              </div>
+
+            </article>
+
+          </div>
+
+          {/* ==================================================
+              STATISTIQUES
+              ================================================== */}
+
+          <div className="stats-grid">
+
+            {/* OISEAUX */}
+
+            <div className="stat-card">
+
+              <div className="stat-icon">
+                01
+              </div>
+
+              <div>
+
+                <span>
+                  Oiseaux détectés
+                </span>
+
+                <strong>
+                  {result
+                    ? result.bird_count
+                    : "—"}
+                </strong>
+
+              </div>
+
+            </div>
+
+            {/* CONFIANCE */}
+
+            <div className="stat-card">
+
+              <div className="stat-icon">
+                %
+              </div>
+
+              <div>
+
+                <span>
+                  Confiance moyenne
+                </span>
+
+                <strong>
+                  {averageConfidence
+                    ? `${averageConfidence} %`
+                    : "—"}
+                </strong>
+
+              </div>
+
+            </div>
+
+            {/* MODÈLE */}
+
+            <div className="stat-card">
+
+              <div className="stat-icon">
+                AI
+              </div>
+
+              <div>
+
+                <span>
+                  Modèle IA
+                </span>
+
+                <strong>
+                  {selectedModelName}
+                </strong>
+
+              </div>
+
+            </div>
+
+            {/* SEUIL */}
+
+            <div className="stat-card">
+
+              <div className="stat-icon">
+                70
+              </div>
+
+              <div>
+
+                <span>
+                  Seuil minimum
+                </span>
+
+                <strong>
+                  70 %
+                </strong>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* ==================================================
+              DÉTAILS DES DÉTECTIONS
+              ================================================== */}
+
+          {result?.detections?.length >
+            0 && (
+            <section className="detection-details">
+
+              <div className="details-heading">
+
+                <div>
+
+                  <span className="section-kicker">
+                    DONNÉES DE DÉTECTION
+                  </span>
+
+                  <h3>
+                    Détails des oiseaux détectés
+                  </h3>
+
+                </div>
+
+                <span className="detection-count">
+
+                  {
+                    result.detections
+                      .length
+                  }{" "}
+
+                  détection(s)
+
+                </span>
+
+              </div>
+
+              <div className="detections-grid">
+
+                {result.detections.map(
+                  (
+                    detection,
+                    index
+                  ) => (
+                    <div
+                      className="detection-card"
+                      key={index}
+                    >
+
+                      <div className="detection-index">
+
+                        {String(
+                          index + 1
+                        ).padStart(
+                          2,
+                          "0"
+                        )}
+
+                      </div>
+
+                      <div className="detection-info">
 
                         <strong>
-                          {(
-                            detection.confidence * 100
-                          ).toFixed(1)}
-                          %
+                          Oiseau{" "}
+                          {index + 1}
                         </strong>
+
+                        <span>
+                          Objet détecté
+                        </span>
+
                       </div>
-                    )
-                  )}
-                </div>
-              )}
-          </div>
+
+                      <div className="confidence-value">
+
+                        <span>
+                          Confiance
+                        </span>
+
+                        <strong>
+
+                          {(
+                            detection.confidence *
+                            100
+                          ).toFixed(1)}
+
+                          {" %"}
+
+                        </strong>
+
+                      </div>
+
+                    </div>
+                  )
+                )}
+
+              </div>
+
+            </section>
+          )}
+
         </section>
+
+        {/* ==================================================
+            TECHNOLOGIE
+            ================================================== */}
+
+        <section
+          className="technology-section"
+          id="technology"
+        >
+
+          <div>
+
+            <span className="section-kicker">
+              TECHNOLOGIE
+            </span>
+
+            <h2>
+              Une architecture conçue pour la
+              vision par ordinateur.
+            </h2>
+
+          </div>
+
+          <div className="tech-stack">
+
+            <span>
+              RT-DETR-X
+            </span>
+
+            <span>
+              YOLO26s
+            </span>
+
+            <span>
+              Django REST
+            </span>
+
+            <span>
+              React
+            </span>
+
+            <span>
+              Computer Vision
+            </span>
+
+          </div>
+
+        </section>
+
       </main>
 
-      {/* FOOTER */}
+      {/* ==================================================
+          FOOTER
+          ================================================== */}
 
-      <footer>
-        <p>
-          BirdVision IA • Détection intelligente d'oiseaux
-        </p>
+      <footer className="footer">
 
-        <span>
-          RT-DETR-X • Django REST • React
-        </span>
+        <div className="footer-inner">
+
+          <div className="footer-brand">
+
+            <div className="footer-logo">
+
+              <img
+                src={birdVisionLogo}
+                alt="BirdVision IA"
+              />
+
+            </div>
+
+            <div>
+
+              <strong>
+                BirdVision IA
+              </strong>
+
+              <span>
+                Détection intelligente
+                d'oiseaux
+              </span>
+
+            </div>
+
+          </div>
+
+          <p>
+            Computer Vision • RT-DETR-X •
+            YOLO26s • Django REST • React
+          </p>
+
+        </div>
+
       </footer>
+
     </div>
   );
 }
