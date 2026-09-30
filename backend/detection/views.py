@@ -35,6 +35,18 @@ MODEL_CONFIG = {
 
 
 # ============================================
+# VÉRIFICATION DES FICHIERS DE MODÈLES
+# ============================================
+
+for model_name, config in MODEL_CONFIG.items():
+    if not config["path"].exists():
+        raise FileNotFoundError(
+            f"Le fichier du modèle {model_name} est introuvable : "
+            f"{config['path']}"
+        )
+
+
+# ============================================
 # CHARGEMENT DES MODÈLES
 # ============================================
 
@@ -66,6 +78,10 @@ print("D-FINE-X chargé avec succès !")
 @api_view(["POST"])
 def detect_birds(request):
 
+    # ========================================
+    # RÉCUPÉRER L'IMAGE
+    # ========================================
+
     image = request.FILES.get("image")
 
     if image is None:
@@ -78,7 +94,10 @@ def detect_birds(request):
     # MODÈLE CHOISI
     # ========================================
 
-    model_name = request.data.get("model", "rtdetr-x").lower()
+    model_name = request.data.get(
+        "model",
+        "rtdetr-x"
+    ).lower()
 
     if model_name not in MODEL_CONFIG:
         return Response(
@@ -101,24 +120,30 @@ def detect_birds(request):
 
     try:
         confidence = float(
-            request.data.get("confidence", 0.70)
+            request.data.get(
+                "confidence",
+                0.25
+            )
         )
     except (TypeError, ValueError):
         return Response(
-            {"error": "Seuil de confiance invalide."},
+            {
+                "error": (
+                    "Seuil de confiance invalide."
+                )
+            },
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # BirdVision accepte uniquement
-    # 50 %, 60 % ou 70 %
-    allowed_confidences = [0.50, 0.60, 0.70]
+    # BirdVision accepte un seuil
+    # compris entre 10 % et 90 %
 
-    if confidence not in allowed_confidences:
+    if confidence < 0.10 or confidence > 0.90:
         return Response(
             {
                 "error": (
-                    "Le seuil doit être 0.50, "
-                    "0.60 ou 0.70."
+                    "Le seuil de confiance doit être "
+                    "compris entre 0.10 et 0.90."
                 )
             },
             status=status.HTTP_400_BAD_REQUEST
@@ -129,11 +154,13 @@ def detect_birds(request):
     # ========================================
 
     upload_directory = (
-        Path(settings.MEDIA_ROOT) / "uploads"
+        Path(settings.MEDIA_ROOT)
+        / "uploads"
     )
 
     result_directory = (
-        Path(settings.MEDIA_ROOT) / "results"
+        Path(settings.MEDIA_ROOT)
+        / "results"
     )
 
     upload_directory.mkdir(
@@ -150,9 +177,15 @@ def detect_birds(request):
     # FORMAT DE L'IMAGE
     # ========================================
 
-    extension = Path(image.name).suffix.lower()
+    extension = Path(
+        image.name
+    ).suffix.lower()
 
-    if extension not in [".jpg", ".jpeg", ".png"]:
+    if extension not in [
+        ".jpg",
+        ".jpeg",
+        ".png"
+    ]:
         return Response(
             {
                 "error": (
@@ -167,15 +200,24 @@ def detect_birds(request):
     # NOM UNIQUE
     # ========================================
 
-    filename = f"{uuid.uuid4()}{extension}"
+    filename = (
+        f"{uuid.uuid4()}{extension}"
+    )
 
-    input_path = upload_directory / filename
+    input_path = (
+        upload_directory
+        / filename
+    )
 
     # ========================================
     # ENREGISTRER L'IMAGE
     # ========================================
 
-    with open(input_path, "wb+") as destination:
+    with open(
+        input_path,
+        "wb+"
+    ) as destination:
+
         for chunk in image.chunks():
             destination.write(chunk)
 
@@ -184,7 +226,11 @@ def detect_birds(request):
     # ========================================
 
     if model_name == "dfine-x":
-        output_path = result_directory / filename
+
+        output_path = (
+            result_directory
+            / filename
+        )
 
         try:
             dfine_result = model.predict(
@@ -192,48 +238,81 @@ def detect_birds(request):
                 confidence=confidence,
                 save_path=str(output_path)
             )
+
         except Exception as error:
             return Response(
                 {
-                    "error": "Erreur pendant la détection D-FINE-X.",
+                    "error": (
+                        "Erreur pendant la "
+                        "détection D-FINE-X."
+                    ),
                     "details": str(error)
                 },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=(
+                    status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
             )
 
-        result_url = request.build_absolute_uri(
-            settings.MEDIA_URL + "results/" + filename
+        result_url = (
+            request.build_absolute_uri(
+                settings.MEDIA_URL
+                + "results/"
+                + filename
+            )
         )
 
         return Response(
             {
                 "success": True,
                 "model": model_name,
-                "bird_count": dfine_result["bird_count"],
-                "confidence_threshold": confidence,
-                "detections": dfine_result["detections"],
-                "result_image": result_url
+                "bird_count": (
+                    dfine_result[
+                        "bird_count"
+                    ]
+                ),
+                "confidence_threshold": (
+                    confidence
+                ),
+                "detections": (
+                    dfine_result[
+                        "detections"
+                    ]
+                ),
+                "result_image": (
+                    result_url
+                )
             }
         )
 
     # ========================================
-    # DÉTECTION
+    # RT-DETR-X / YOLO26s
     # ========================================
 
     try:
         results = model.predict(
             source=str(input_path),
-            conf=0.50,
+
+            # IMPORTANT :
+            # utiliser le seuil choisi
+            # dans le frontend
+            conf=confidence,
+
             imgsz=1280,
             verbose=False
         )
+
     except Exception as error:
         return Response(
             {
-                "error": "Erreur pendant la détection.",
+                "error": (
+                    "Erreur pendant "
+                    "la détection."
+                ),
                 "details": str(error)
             },
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            status=(
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
         )
 
     result = results[0]
@@ -248,30 +327,64 @@ def detect_birds(request):
         str(input_path)
     )
 
+    if annotated_image is None:
+        return Response(
+            {
+                "error": (
+                    "Impossible de lire "
+                    "l'image envoyée."
+                )
+            },
+            status=(
+                status.HTTP_400_BAD_REQUEST
+            )
+        )
+
     # ========================================
     # PARCOURIR LES BOUNDING BOXES
     # ========================================
 
     for box in result.boxes:
 
-        class_id = int(box.cls[0])
+        class_id = int(
+            box.cls[0]
+        )
 
-        # Récupérer le nom de la classe
-        class_name = model.names[class_id]
+        # Récupérer le nom
+        # de la classe
 
-        # Garder uniquement les oiseaux
-        if class_name.lower() != "bird":
+        class_name = (
+            model.names[
+                class_id
+            ]
+        )
+
+        # Garder uniquement
+        # les oiseaux
+
+        if (
+            class_name.lower()
+            != "bird"
+        ):
             continue
 
         confidence_score = float(
             box.conf[0]
         )
 
-        # Respecter le seuil choisi
-        if confidence_score < confidence:
+        # Respecter le seuil
+        # choisi par l'utilisateur
+
+        if (
+            confidence_score
+            < confidence
+        ):
             continue
 
-        coordinates = box.xyxy[0].tolist()
+        coordinates = (
+            box.xyxy[0]
+            .tolist()
+        )
 
         x1, y1, x2, y2 = map(
             int,
@@ -298,7 +411,13 @@ def detect_birds(request):
         cv2.putText(
             annotated_image,
             label,
-            (x1, max(y1 - 10, 20)),
+            (
+                x1,
+                max(
+                    y1 - 10,
+                    20
+                )
+            ),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
             (0, 255, 0),
@@ -312,10 +431,12 @@ def detect_birds(request):
         detections.append(
             {
                 "class": "bird",
+
                 "confidence": round(
                     confidence_score,
                     4
                 ),
+
                 "box": {
                     "x1": round(
                         coordinates[0],
@@ -342,22 +463,38 @@ def detect_birds(request):
     # ========================================
 
     output_path = (
-        result_directory / filename
+        result_directory
+        / filename
     )
 
-    cv2.imwrite(
+    success = cv2.imwrite(
         str(output_path),
         annotated_image
     )
+
+    if not success:
+        return Response(
+            {
+                "error": (
+                    "Impossible d'enregistrer "
+                    "l'image résultat."
+                )
+            },
+            status=(
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        )
 
     # ========================================
     # URL DE L'IMAGE RÉSULTAT
     # ========================================
 
-    result_url = request.build_absolute_uri(
-        settings.MEDIA_URL
-        + "results/"
-        + filename
+    result_url = (
+        request.build_absolute_uri(
+            settings.MEDIA_URL
+            + "results/"
+            + filename
+        )
     )
 
     # ========================================
@@ -368,9 +505,15 @@ def detect_birds(request):
         {
             "success": True,
             "model": model_name,
-            "bird_count": len(detections),
-            "confidence_threshold": confidence,
+            "bird_count": len(
+                detections
+            ),
+            "confidence_threshold": (
+                confidence
+            ),
             "detections": detections,
-            "result_image": result_url
+            "result_image": (
+                result_url
+            )
         }
     )
