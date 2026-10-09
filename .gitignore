@@ -48,3 +48,9 @@ frontend/dist/
 # =========================
 Thumbs.db
 Desktop.ini
+# =========================
+# IDE / sorties d'entrainement
+# =========================
+.idea/
+runs/
+

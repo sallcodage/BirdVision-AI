@@ -25,7 +25,9 @@ SECRET_KEY = 'django-insecure-rj9##gl4de&^_-__bnssczzkd(fqi1i24jax-sn$8kudy=mi49
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# "*" permet à l’émulateur Android (10.0.2.2) et aux téléphones du réseau local
+# d’appeler l’API en développement.
+ALLOWED_HOSTS = ["*"] if DEBUG else []
 
 
 # Application definition
@@ -128,10 +130,7 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+CORS_ALLOW_ALL_ORIGINS = True
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
