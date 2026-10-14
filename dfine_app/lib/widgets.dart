@@ -267,7 +267,7 @@ class ErrorBanner extends StatelessWidget {
 
 /// Couleur de confiance : vert (sûr) → orange → rouge (incertain).
 Color confidenceColor(double value) {
-  if (value >= 0.7) return const Color(0xFF2E7D32);
+  if (value >= 0.7) return const Color(0xFF1268E8);
   if (value >= 0.45) return const Color(0xFFEF8F00);
   return const Color(0xFFD84315);
 }

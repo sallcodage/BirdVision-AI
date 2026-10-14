@@ -1,21 +1,26 @@
 import 'package:flutter/material.dart';
 
 import 'api.dart';
+import 'brand.dart';
 import 'image_page.dart';
 import 'video_page.dart';
 
 void main() => runApp(const DfineApp());
 
-const _seed = Color(0xFF2E7D32);
+const _seed = BrandColors.blue;
 
 ThemeData _theme(Brightness brightness) {
-  final scheme = ColorScheme.fromSeed(seedColor: _seed, brightness: brightness);
+  final scheme = ColorScheme.fromSeed(
+    seedColor: _seed,
+    primary: brightness == Brightness.light ? _seed : null,
+    brightness: brightness,
+  );
 
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: brightness == Brightness.light
-        ? const Color(0xFFF4F7F2)
+        ? BrandColors.background
         : scheme.surface,
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: scheme.surfaceContainer,
@@ -241,7 +246,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-/// En-tête vert avec le titre, l'état du serveur et les réglages.
+/// En-tête avec le logo, le titre, l'état du serveur et les réglages.
 class _Header extends StatelessWidget {
   const _Header({
     required this.online,
@@ -257,14 +262,14 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final (dot, text) = switch (online) {
       null => (Colors.amber, 'Connexion…'),
-      true => (const Color(0xFF69F0AE), 'Serveur en ligne'),
+      true => (BrandColors.cyan, 'Serveur en ligne'),
       false => (const Color(0xFFFF8A80), 'Serveur hors ligne'),
     };
 
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF1B5E20), Color(0xFF2E7D32), Color(0xFF00897B)],
+          colors: [Color(0xFF04131F), Color(0xFF07263E), Color(0xFF074C70)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -276,18 +281,7 @@ class _Header extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 12, 8, 20),
           child: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.flutter_dash,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ),
+              const BrandLogo(size: 50),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -320,7 +314,7 @@ class _Header extends StatelessWidget {
                           Text(
                             'D-FINE-X · $text',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.9),
+                              color: BrandColors.softText,
                               fontSize: 13,
                             ),
                           ),
