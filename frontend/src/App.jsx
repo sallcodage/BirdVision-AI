@@ -1,21 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 
-
-
 import birdVisionLogo from "./assets/birdvision-logo.png";
 
-
-
 import Login from "./pages/Login";
-
-
+import Register from "./pages/Register";
+import Home from "./pages/Home";
+import siribraLogo from "./assets/siribra-logo.png";
 
 import SplashScreen from "./pages/SplashScreen";
 
-
-
 import "./App.css";
-
 
 
 
@@ -23,12 +17,8 @@ import "./App.css";
 function App() {
 
   /* ======================================================
-
-     SPLASH SCREEN
-
-     ====================================================== */
-
-
+    SPLASH SCREEN
+    ====================================================== */
 
   const [showSplash, setShowSplash] = useState(true);
 
@@ -44,11 +34,17 @@ function App() {
 
 
 
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Vérifie si l'utilisateur est connecté
+const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+// Permet de passer de Connexion à Inscription
+const [authPage, setAuthPage] = useState("home");
 
+// Informations de l'utilisateur connecté
+const [currentUser, setCurrentUser] = useState(null);
 
-  const [currentUser, setCurrentUser] = useState(null);
+// Token envoyé par Django après connexion
+const [authToken, setAuthToken] = useState(null);
 
 
 
@@ -114,19 +110,14 @@ function App() {
 
 
   const selectedModelName =
-
-    selectedModel === "rtdetr-x"
-
-      ? "RT-DETR-X"
-
-      : selectedModel === "yolo26s"
-
-        ? "YOLO26s"
-
-        : selectedModel === "dfine-x"
-
-          ? "D-FINE-X"
-
+  selectedModel === "rtdetr-x"
+    ? "RT-DETR-X"
+    : selectedModel === "yolo26s"
+      ? "YOLO26s"
+      : selectedModel === "dfine-x"
+        ? "D-FINE-X"
+        : selectedModel === "rfdetr-s"
+          ? "RF-DETR-S"
           : "Modèle inconnu";
 
 
@@ -197,15 +188,21 @@ function App() {
 
 
 
-  const handleLogin = (userData) => {
+  const handleLogin = ({ user, token, rememberMe }) => {
 
-    setCurrentUser(userData);
+  // Enregistrer les informations de l'utilisateur
+  setCurrentUser(user);
 
+  // Enregistrer le token envoyé par Django
+  setAuthToken(token);
 
+  // Autoriser l'accès à BirdVision IA
+  setIsAuthenticated(true);
 
-    setIsAuthenticated(true);
+  // Réinitialiser la page d'authentification
+  setAuthPage("login");
 
-  };
+};
 
 
 
@@ -221,17 +218,22 @@ function App() {
 
   const handleLogout = () => {
 
-    handleReset();
+  // Réinitialiser les données de détection
+  handleReset();
 
+  // Supprimer les informations de l'utilisateur
+  setCurrentUser(null);
 
+  // Effacer le token Django
+  setAuthToken(null);
 
-    setCurrentUser(null);
+  // Déconnecter l'utilisateur
+  setIsAuthenticated(false);
 
+  // Revenir à la page de connexion
+  setAuthPage("home");
 
-
-    setIsAuthenticated(false);
-
-  };
+};
 
 
 
@@ -246,24 +248,19 @@ function App() {
 
 
   const handleModelChange = (event) => {
+  const newModel = event.target.value;
 
-    setSelectedModel(event.target.value);
+  setSelectedModel(newModel);
 
+  // Définir le seuil par défaut selon le modèle
+  setConfidenceThreshold(
+    newModel === "rfdetr-s" ? 0.09 : 0.25
+  );
 
-
-    // On efface l'ancien résultat afin de ne pas afficher
-
-    // un résultat provenant d'un autre modèle.
-
-
-
-    setResult(null);
-
-
-
-    setError("");
-
-  };
+  // Effacer les anciens résultats
+  setResult(null);
+  setError("");
+};
 
 
 
@@ -277,81 +274,46 @@ function App() {
 
 
 
+  
+
+  /* ======================================================
+     SÉLECTION IMAGE
+     ====================================================== */
+
   const handleImageChange = (event) => {
-
     const file = event.target.files?.[0];
-
-
 
     if (!file) return;
 
-
-
     const allowedTypes = [
-
       "image/jpeg",
-
       "image/png",
-
     ];
 
-
-
     if (!allowedTypes.includes(file.type)) {
-
       setError(
-
         "Veuillez sélectionner une image JPG, JPEG ou PNG."
-
       );
-
-
-
       return;
-
     }
-
-
 
     if (preview) {
-
       URL.revokeObjectURL(preview);
-
     }
 
-
-
     setImage(file);
-
-
-
     setPreview(URL.createObjectURL(file));
-
-
-
     setResult(null);
-
-
-
     setError("");
-
   };
 
-
-
-
-
   /* ======================================================
-
      DÉTECTION
-
      RT-DETR-X / YOLO26s / D-FINE-X
-
      ====================================================== */
 
-
-
   const handleDetect = async () => {
+
 
     if (!image) {
 
@@ -428,18 +390,19 @@ function App() {
     try {
 
       const response = await fetch(
+  "http://127.0.0.1:8000/api/detect/",
+  {
+    method: "POST",
 
-        "http://127.0.0.1:8000/api/detect/",
+    // Envoyer le token de l'utilisateur connecté
+    headers: {
+      Authorization: `Token ${authToken}`,
+    },
 
-        {
-
-          method: "POST",
-
-          body: formData,
-
-        }
-
-      );
+    // Envoyer l'image et les paramètres IA
+    body: formData,
+  }
+);
 
 
 
@@ -627,19 +590,32 @@ function App() {
 
 
 
-  if (!isAuthenticated) {
-
+  
+if (!isAuthenticated) {
+  if (authPage === "home") {
     return (
-
-      <Login
-
-        onLogin={handleLogin}
-
+      <Home
+        onLogin={() => setAuthPage("login")}
+        onRegister={() => setAuthPage("register")}
       />
-
     );
-
   }
+
+  if (authPage === "register") {
+    return (
+      <Register
+        onGoToLogin={() => setAuthPage("login")}
+      />
+    );
+  }
+
+  return (
+    <Login
+      onLogin={handleLogin}
+      onGoToRegister={() => setAuthPage("register")}
+    />
+  );
+}
 
 
 
@@ -832,23 +808,13 @@ function App() {
       </header>
 
 
+      
+<main>
+  {/* ==================================================
+      HERO
+      ================================================== */}
 
-
-
-      <main>
-
-
-
-        {/* ==================================================
-
-            HERO
-
-            ================================================== */}
-
-
-
-        <section className="hero">
-
+  <section className="hero">
 
 
           <div className="hero-glow hero-glow-one"></div>
@@ -1558,44 +1524,27 @@ function App() {
 
 
                   <select
+  id="model-select"
+  value={selectedModel}
+  onChange={handleModelChange}
+  disabled={loading}
+>
+  <option value="rtdetr-x">
+    RT-DETR-X
+  </option>
 
-                    id="model-select"
+  <option value="yolo26s">
+    YOLO26s
+  </option>
 
-                    value={selectedModel}
+  <option value="dfine-x">
+    D-FINE-X
+  </option>
 
-                    onChange={handleModelChange}
-
-                    disabled={loading}
-
-                  >
-
-
-
-                    <option value="rtdetr-x">
-
-                      RT-DETR-X
-
-                    </option>
-
-
-
-                    <option value="yolo26s">
-
-                      YOLO26s
-
-                    </option>
-
-
-
-                    <option value="dfine-x">
-
-                      D-FINE-X
-
-                    </option>
-
-
-
-                  </select>
+  <option value="rfdetr-s">
+    RF-DETR-S
+  </option>
+</select>
 
 
 
@@ -1614,25 +1563,25 @@ function App() {
                   </div>
 
                   <input
-                    id="confidence-range"
-                    type="range"
-                    min="0.10"
-                    max="0.90"
-                    step="0.05"
-                    value={confidenceThreshold}
-                    onChange={(event) => {
-                      setConfidenceThreshold(Number(event.target.value));
-                      setResult(null);
-                      setError("");
-                    }}
-                    disabled={loading}
-                  />
+  id="confidence-range"
+  type="range"
+  min={selectedModel === "rfdetr-s" ? "0.09" : "0.10"}
+  max="0.90"
+  step="0.01"
+  value={confidenceThreshold}
+  onChange={(event) => {
+    setConfidenceThreshold(Number(event.target.value));
+    setResult(null);
+    setError("");
+  }}
+  disabled={loading}
+/>
 
                   <div className="confidence-scale">
-                    <span>10 %</span>
-                    <span>50 %</span>
-                    <span>90 %</span>
-                  </div>
+  <span>{selectedModel === "rfdetr-s" ? "9 %" : "10 %"}</span>
+  <span>50 %</span>
+  <span>90 %</span>
+</div>
 
                   <p className="confidence-help">
                     Un seuil plus faible détecte davantage d'oiseaux, mais peut produire plus de fausses détections.
@@ -2844,6 +2793,11 @@ function App() {
               D-FINE-X
 
             </span>
+            <span>
+
+              RF-DETR-S
+
+            </span>
 
 
 
@@ -2891,98 +2845,42 @@ function App() {
 
           ================================================== */}
 
+  <footer className="footer">
+    <div className="footer-inner">
 
+     <div className="footer-brand">
+      <div className="footer-logo">
+        <img src={birdVisionLogo} alt="BirdVision IA" />
+      </div>
 
-      <footer className="footer">
-
-
-
-        <div className="footer-inner">
-
-
-
-          <div className="footer-brand">
-
-
-
-            <div className="footer-logo">
-
-
-
-              <img
-
-                src={birdVisionLogo}
-
-                alt="BirdVision IA"
-
-              />
-
-
-
-            </div>
-
-
-
-
-
-            <div>
-
-
-
-              <strong>
-
-                BirdVision IA
-
-              </strong>
-
-
-
-              <span>
-
-                Détection intelligente
-
-                d'oiseaux
-
-              </span>
-
-
-
-            </div>
-
-
-
-          </div>
-
-
-
-
-
-          <p>
-
-            Computer Vision • RT-DETR-X •
-
-            YOLO26s • D-FINE-X • Django REST • React
-
-          </p>
-
-
-
-        </div>
-
-
-
-      </footer>
-
-
-
+      <div>
+        <strong>BirdVision IA</strong>
+        <span>Détection intelligente d'oiseaux</span>
+      </div>
     </div>
 
+    <div className="footer-company">
+      <img
+        src={siribraLogo}
+        alt="Logo SIRIBRA GROUP"
+        className="siribra-logo"
+      />
+
+      <div className="footer-company-info">
+        <strong>SIRIBRA GROUP</strong>
+        <span>TECHNOLOGIE. VISION. IMPACT.</span>
+        <small>Entreprise porteuse du projet BirdVision IA</small>
+      </div>
+    </div>
+
+    <p>
+      BirdVision IA • RT-DETR-X • YOLO26s • D-FINE-X • RF-DETR-S
+    </p>
+
+    </div>
+  </footer>
+    </div>
   );
-
 }
-
-
-
-
 
 export default App;

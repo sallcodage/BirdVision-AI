@@ -40,14 +40,12 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
-    # API
     "rest_framework",
-
-    # CORS
+    "rest_framework.authtoken",
     "corsheaders",
 
-    # BirdVision IA
     "detection",
+    "accounts",
 ]
 
 
@@ -180,17 +178,25 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 # ============================================================
 # CORS
-# Autoriser le frontend React/Vite
+# React / Vite + Flutter Web
 # ============================================================
 
 CORS_ALLOWED_ORIGINS = [
+    # React / Vite
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+
     "http://localhost:5174",
     "http://127.0.0.1:5174",
+
     "http://localhost:5175",
     "http://127.0.0.1:5175",
+
+    # Flutter Web
+    "http://localhost:5176",
+    "http://127.0.0.1:5176",
 ]
+
 
 # ============================================================
 # DJANGO REST FRAMEWORK

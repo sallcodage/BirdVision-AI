@@ -7,6 +7,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
 
 # =========================
 # Django
@@ -18,25 +19,57 @@ backend/media/
 # =========================
 # Modèles IA
 # =========================
+models/
 *.pt
 *.pth
+*.onnx
+*.safetensors
+
+# =========================
+# D-FINE
+# =========================
+D-FINE/
 
 # =========================
 # Résultats de détection
 # =========================
 results/
+runs/
+uploads/
 
 # =========================
-# React / Node
+# React / Node.js
 # =========================
+node_modules/
+dist/
 frontend/node_modules/
 frontend/dist/
+
+# =========================
+# Flutter
+# =========================
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.apk
+*.aab
+*.ipa
+*.jks
+*.keystore
+key.properties
 
 # =========================
 # Variables secrètes
 # =========================
 .env
 .env.*
+!.env.example
+*.pem
+*.key
 
 # =========================
 # VS Code
@@ -47,4 +80,11 @@ frontend/dist/
 # Windows
 # =========================
 Thumbs.db
-Desktop.iniD-FINE/
+Desktop.ini
+
+# =========================
+# Fichiers temporaires
+# =========================
+*.tmp
+*.bak
+*.swp

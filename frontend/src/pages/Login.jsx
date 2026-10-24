@@ -1,10 +1,15 @@
+
 import { useState } from "react";
 import "./Login.css";
 
 import birdVisionLogo from "../assets/birdvision-logo.png";
 import loginBackground from "../assets/login-background.png";
 
-function Login({ onLogin }) {
+function Login({ onLogin, onGoToRegister }) {
+  // ==========================================
+  // ÉTATS DU FORMULAIRE
+  // ==========================================
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -12,40 +17,79 @@ function Login({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // ==========================================
+  // CONNEXION AVEC DJANGO
+  // ==========================================
+
   const handleSubmit = async (event) => {
     event.preventDefault();
-
     setError("");
 
     if (!email.trim() || !password.trim()) {
-      setError("Veuillez renseigner votre email et votre mot de passe.");
+      setError(
+        "Veuillez renseigner votre email et votre mot de passe."
+      );
       return;
     }
 
     setLoading(true);
 
     try {
-      /*
-        Pour l'instant, nous préparons l'interface.
+      const response = await fetch(
+        "http://127.0.0.1:8000/api/auth/login/",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: email.trim().toLowerCase(),
+            password,
+          }),
+        }
+      );
 
-        Ensuite, nous remplacerons cette partie
-        par la vraie authentification Django.
-      */
+      const data = await response.json();
 
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
-      if (onLogin) {
-        onLogin({
-          email,
-          rememberMe,
-        });
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "Email ou mot de passe incorrect."
+        );
       }
+
+      if (!data.token || !data.user) {
+        throw new Error(
+          "Réponse de connexion incomplète."
+        );
+      }
+
+      // Transmission de l'utilisateur à App.jsx
+      onLogin?.({
+        user: data.user,
+        token: data.token,
+        rememberMe,
+      });
+
     } catch (err) {
-      setError("Impossible de vous connecter. Veuillez réessayer.");
+      if (err instanceof TypeError) {
+        setError(
+          "Impossible de contacter Django. Vérifiez que le serveur fonctionne."
+        );
+      } else {
+        setError(
+          err.message ||
+          "Impossible de vous connecter. Veuillez réessayer."
+        );
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  // ==========================================
+  // INTERFACE
+  // ==========================================
 
   return (
     <main
@@ -54,21 +98,24 @@ function Login({ onLogin }) {
         backgroundImage: `url(${loginBackground})`,
       }}
     >
-      {/* Couche sombre sur l'image */}
+      {/* FOND SOMBRE */}
       <div className="login-overlay"></div>
 
-      {/* Lumières décoratives */}
+      {/* LUMIÈRES DÉCORATIVES */}
       <div className="login-glow login-glow-one"></div>
       <div className="login-glow login-glow-two"></div>
 
       <div className="login-container">
 
-        {/* ================================
+        {/* ===================================
             PARTIE GAUCHE
-        ================================= */}
+        ==================================== */}
+
         <section className="login-showcase">
 
+          {/* LOGO ET NOM */}
           <div className="login-showcase-brand">
+
             <div className="showcase-logo">
               <img
                 src={birdVisionLogo}
@@ -83,8 +130,10 @@ function Login({ onLogin }) {
 
               <p>Computer Vision Platform</p>
             </div>
+
           </div>
 
+          {/* PRÉSENTATION */}
           <div className="showcase-content">
 
             <div className="showcase-badge">
@@ -99,49 +148,53 @@ function Login({ onLogin }) {
             </h2>
 
             <p className="showcase-description">
-              Une plateforme intelligente de vision par ordinateur
-              conçue pour détecter automatiquement les oiseaux
-              à partir d'images grâce à l'intelligence artificielle.
+              Découvrez une nouvelle manière d'observer
+              et d'analyser les oiseaux grâce à la
+              puissance de l'intelligence artificielle.
             </p>
 
+            {/* FONCTIONNALITÉS */}
             <div className="showcase-features">
 
               <div className="showcase-feature">
-                <div className="feature-symbol">
-                  AI
+                <div className="showcase-feature-icon">
+                  <span>AI</span>
                 </div>
 
                 <div>
                   <strong>Détection intelligente</strong>
-                  <span>
-                    Identification automatique des oiseaux
-                  </span>
+                  <p>
+                    Localisez automatiquement les oiseaux
+                    présents dans vos images.
+                  </p>
                 </div>
               </div>
 
               <div className="showcase-feature">
-                <div className="feature-symbol">
-                  CV
+                <div className="showcase-feature-icon">
+                  <span>CV</span>
                 </div>
 
                 <div>
-                  <strong>Computer Vision</strong>
-                  <span>
-                    Analyse précise des images
-                  </span>
+                  <strong>Vision par ordinateur</strong>
+                  <p>
+                    Analysez vos photographies avec
+                    des technologies avancées.
+                  </p>
                 </div>
               </div>
 
               <div className="showcase-feature">
-                <div className="feature-symbol">
-                  RT
+                <div className="showcase-feature-icon">
+                  <span>RT</span>
                 </div>
 
                 <div>
-                  <strong>RT-DETR</strong>
-                  <span>
-                    Modèle de détection performant
-                  </span>
+                  <strong>Modèles d'intelligence artificielle</strong>
+                  <p>
+                    Exploitez RT-DETR-X, YOLO26s
+                    et D-FINE-X pour vos analyses.
+                  </p>
                 </div>
               </div>
 
@@ -149,53 +202,57 @@ function Login({ onLogin }) {
 
           </div>
 
+          {/* BAS DE LA PARTIE GAUCHE */}
           <div className="showcase-footer">
-            <span className="showcase-footer-dot"></span>
-
+            <span className="showcase-status-dot"></span>
             Système de détection opérationnel
           </div>
 
         </section>
 
+        {/* ===================================
+            PARTIE DROITE
+            FORMULAIRE DE CONNEXION
+        ==================================== */}
 
-        {/* ================================
-            PARTIE DROITE : LOGIN
-        ================================= */}
         <section className="login-card">
 
+          {/* EN-TÊTE */}
           <div className="login-card-top">
 
-            <div className="mobile-logo">
+            <div className="login-mobile-brand">
               <img
                 src={birdVisionLogo}
                 alt="BirdVision IA"
               />
+
+              <span>BirdVision IA</span>
             </div>
 
             <div className="login-security">
-              <span className="security-dot"></span>
+              <span>●</span>
               Accès sécurisé
             </div>
 
           </div>
 
-
+          {/* TITRE */}
           <div className="login-heading">
 
             <span className="login-kicker">
-              BIRDVISION IA
+              BIENVENUE SUR BIRDVISION IA
             </span>
 
-            <h2>Bienvenue</h2>
+            <h2>Connexion</h2>
 
             <p>
-              Connectez-vous pour accéder à votre
-              espace d'analyse intelligent.
+              Connectez-vous à votre espace pour
+              commencer vos analyses intelligentes.
             </p>
 
           </div>
 
-
+          {/* FORMULAIRE */}
           <form
             className="login-form"
             onSubmit={handleSubmit}
@@ -204,84 +261,58 @@ function Login({ onLogin }) {
             {/* EMAIL */}
             <div className="form-group">
 
-              <label htmlFor="email">
+              <label htmlFor="login-email">
                 Adresse email
               </label>
 
               <div className="input-wrapper">
 
-                <div className="input-icon">
-                  @
-                </div>
-
                 <input
-                  id="email"
+                  id="login-email"
                   type="email"
+                  placeholder="exemple@email.com"
                   value={email}
                   onChange={(event) =>
                     setEmail(event.target.value)
                   }
-                  placeholder="votre@email.com"
                   autoComplete="email"
+                  required
                 />
 
               </div>
 
             </div>
 
-
             {/* MOT DE PASSE */}
             <div className="form-group">
 
-              <div className="password-label">
+              <label htmlFor="login-password">
+                Mot de passe
+              </label>
 
-                <label htmlFor="password">
-                  Mot de passe
-                </label>
-
-                <button
-                  type="button"
-                  className="forgot-password"
-                  onClick={() =>
-                    alert(
-                      "La récupération du mot de passe sera ajoutée prochainement."
-                    )
-                  }
-                >
-                  Mot de passe oublié ?
-                </button>
-
-              </div>
-
-
-              <div className="input-wrapper">
-
-                <div className="input-icon">
-                  •••
-                </div>
+              <div className="input-wrapper password-wrapper">
 
                 <input
-                  id="password"
+                  id="login-password"
                   type={
                     showPassword
                       ? "text"
                       : "password"
                   }
+                  placeholder="Entrez votre mot de passe"
                   value={password}
                   onChange={(event) =>
                     setPassword(event.target.value)
                   }
-                  placeholder="Votre mot de passe"
                   autoComplete="current-password"
+                  required
                 />
 
                 <button
                   type="button"
                   className="password-toggle"
                   onClick={() =>
-                    setShowPassword(
-                      (previous) => !previous
-                    )
+                    setShowPassword(!showPassword)
                   }
                   aria-label={
                     showPassword
@@ -289,15 +320,16 @@ function Login({ onLogin }) {
                       : "Afficher le mot de passe"
                   }
                 >
-                  {showPassword ? "Masquer" : "Afficher"}
+                  {showPassword
+                    ? "Masquer"
+                    : "Afficher"}
                 </button>
 
               </div>
 
             </div>
 
-
-            {/* OPTIONS */}
+            {/* SE SOUVENIR DE MOI */}
             <div className="login-options">
 
               <label className="remember-me">
@@ -306,106 +338,113 @@ function Login({ onLogin }) {
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(event) =>
-                    setRememberMe(
-                      event.target.checked
-                    )
+                    setRememberMe(event.target.checked)
                   }
                 />
 
-                <span className="custom-checkbox">
-                  {rememberMe ? "✓" : ""}
-                </span>
-
-                <span>
-                  Se souvenir de moi
-                </span>
+                <span>Se souvenir de moi</span>
 
               </label>
 
             </div>
 
-
             {/* ERREUR */}
             {error && (
-              <div className="login-error">
-                <div className="error-symbol">
-                  !
-                </div>
-
-                <span>{error}</span>
+              <div
+                className="login-error"
+                role="alert"
+              >
+                {error}
               </div>
             )}
 
-
-            {/* BOUTON */}
+            {/* BOUTON CONNEXION */}
             <button
               type="submit"
               className="login-button"
               disabled={loading}
             >
-
               {loading ? (
                 <>
-                  <span className="login-spinner"></span>
-                  Connexion...
+                  <span className="button-loader"></span>
+                  Connexion en cours...
                 </>
               ) : (
                 <>
-                  <span>Se connecter</span>
-                  <span className="login-arrow">
-                    →
-                  </span>
+                  Se connecter
+                  <span>→</span>
                 </>
               )}
-
             </button>
 
           </form>
 
-
           {/* SÉPARATEUR */}
           <div className="login-divider">
-            <span></span>
-
-            <p>PLATEFORME SÉCURISÉE</p>
-
-            <span></span>
+            <span>OU</span>
           </div>
 
+          {/* INSCRIPTION */}
+          <div
+            className="login-register-section"
+            style={{
+              textAlign: "center",
+              marginTop: "18px",
+            }}
+          >
+
+            <p
+              style={{
+                color: "#64748b",
+                fontSize: "14px",
+                marginBottom: "12px",
+              }}
+            >
+              Vous n'avez pas encore de compte ?
+            </p>
+
+            <button
+              type="button"
+              onClick={onGoToRegister}
+              style={{
+                width: "100%",
+                padding: "14px 18px",
+                background: "transparent",
+                color: "#0891b2",
+                border: "1px solid #0891b2",
+                borderRadius: "10px",
+                fontWeight: "700",
+                fontSize: "14px",
+                cursor: "pointer",
+              }}
+            >
+              Créer un compte →
+            </button>
+
+          </div>
 
           {/* INFORMATIONS */}
           <div className="login-info">
 
-            <div className="login-info-icon">
-              AI
-            </div>
-
-            <div>
-              <strong>
-                Analyse propulsée par l'IA
-              </strong>
-
-              <p>
-                BirdVision utilise la vision par ordinateur
-                pour analyser vos images.
-              </p>
-            </div>
+            <p>
+              BirdVision IA est une plateforme
+              intelligente de détection et de
+              comptage des oiseaux.
+            </p>
 
           </div>
 
-
+          {/* PIED DE CARTE */}
           <div className="login-card-footer">
-            <span>
-              BirdVision IA
-            </span>
 
-            <span className="footer-separator">
-              •
+            <span>
+              © {new Date().getFullYear()} BirdVision IA
             </span>
 
             <span>
-              Intelligence Artificielle
+              Computer Vision Platform
             </span>
+
           </div>
 
         </section>
