@@ -15,33 +15,34 @@ DFINE_ROOT = PROJECT_ROOT / "D-FINE"
 if str(DFINE_ROOT) not in sys.path:
     sys.path.insert(0, str(DFINE_ROOT))
 
+import src.nn  # noqa: F401 — enregistre les classes du modèle D-FINE via @register()
 from src.core import YAMLConfig
 
 
 class DfineModel:
     """
-    Wrapper BirdVision AI pour D-FINE-X.
+    Wrapper BirdVision AI pour D-FINE (X par défaut, S pour la version rapide).
     """
 
-    def __init__(self):
+    def __init__(self, size="x"):
         self.project_root = PROJECT_ROOT
 
         self.config_path = (
             DFINE_ROOT
             / "configs"
             / "dfine"
-            / "dfine_hgnetv2_x_coco.yml"
+            / f"dfine_hgnetv2_{size}_coco.yml"
         )
 
         self.model_path = (
             PROJECT_ROOT
             / "models"
-            / "dfine_x_coco.pth"
+            / f"dfine_{size}_coco.pth"
         )
 
         self.device = torch.device("cpu")
 
-        print("Chargement de D-FINE-X...")
+        print(f"Chargement de D-FINE-{size.upper()}...")
 
         if not self.config_path.exists():
             raise FileNotFoundError(
@@ -56,7 +57,10 @@ class DfineModel:
         # Charger la configuration
         cfg = YAMLConfig(
             str(self.config_path),
-            resume=str(self.model_path)
+            resume=str(self.model_path),
+            # Le checkpoint contient déjà tout le réseau : inutile de
+            # télécharger les poids pré-entraînés du backbone.
+            HGNetv2={"pretrained": False},
         )
 
         # Le checkpoint D-FINE-X contient le modèle entraîné.
@@ -100,7 +104,7 @@ class DfineModel:
             ]
         )
 
-        print("D-FINE-X chargé avec succès !")
+        print(f"D-FINE-{size.upper()} chargé avec succès !")
 
     def predict(
         self,

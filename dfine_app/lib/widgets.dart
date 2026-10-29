@@ -1,5 +1,68 @@
 import 'package:flutter/material.dart';
 
+import 'api.dart';
+
+/// Cadres des oiseaux dessinés par-dessus une image ou une vidéo.
+/// À placer dans un Stack de même taille que l'aperçu.
+class BoxOverlay extends StatelessWidget {
+  const BoxOverlay(this.boxes, {super.key});
+
+  final List<BirdBox> boxes;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: CustomPaint(painter: _BoxPainter(boxes), size: Size.infinite),
+    );
+  }
+}
+
+class _BoxPainter extends CustomPainter {
+  _BoxPainter(this.boxes);
+
+  final List<BirdBox> boxes;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final b in boxes) {
+      final color = confidenceColor(b.confidence);
+      final rect = Rect.fromLTRB(
+        b.x1 * size.width,
+        b.y1 * size.height,
+        b.x2 * size.width,
+        b.y2 * size.height,
+      );
+
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(6)),
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3,
+      );
+
+      final label = TextPainter(
+        text: TextSpan(
+          text: ' oiseau ${(b.confidence * 100).round()} % ',
+          style: TextStyle(
+            color: Colors.white,
+            backgroundColor: color,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      final top = rect.top - label.height < 0 ? rect.top : rect.top - label.height;
+      label.paint(canvas, Offset(rect.left, top));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BoxPainter old) => old.boxes != boxes;
+}
+
 /// Grande tuile d'action (Galerie, Caméra…).
 class ActionTile extends StatelessWidget {
   const ActionTile({

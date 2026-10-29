@@ -1,0 +1,36 @@
+name: rfdetr_app
+description: "BirdVision RF-DETR-S : détection d'oiseaux via l'API Django."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  image_picker: ^1.2.4
+  http: ^1.6.0
+  video_player: ^2.11.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/birdvision-logo.png
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/images/birdvision-logo.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/birdvision-logo-foreground.png"
+  min_sdk_android: 21

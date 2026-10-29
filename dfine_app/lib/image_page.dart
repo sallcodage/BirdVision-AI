@@ -24,7 +24,6 @@ class _ImagePageState extends State<ImagePage> {
   String? _error;
   bool _loading = false;
 
-  /// Afficher l'image annotée (true) ou l'originale (false).
   bool _showResult = true;
 
   Future<void> _pick(ImageSource source) async {
@@ -55,6 +54,7 @@ class _ImagePageState extends State<ImagePage> {
       final result = await widget.settings.api.detectImage(
         _image!,
         confidence: widget.settings.confidence,
+        model: widget.settings.model,
       );
       setState(() {
         _result = result;
@@ -68,7 +68,6 @@ class _ImagePageState extends State<ImagePage> {
   }
 
   Widget _original() => kIsWeb
-      // Sur le web, path est une URL blob: lisible par Image.network.
       ? Image.network(_image!.path, fit: BoxFit.contain)
       : Image.file(File(_image!.path), fit: BoxFit.contain);
 
@@ -98,6 +97,8 @@ class _ImagePageState extends State<ImagePage> {
                 .reduce((a, b) => a + b) /
             detections.length;
 
+    final modelName = widget.settings.modelDisplayName;
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
       children: [
@@ -111,7 +112,7 @@ class _ImagePageState extends State<ImagePage> {
         else
           PreviewFrame(
             loading: _loading,
-            loadingText: 'D-FINE-X analyse l\'image…\nenviron 10 secondes',
+            loadingText: '$modelName analyse l\'image…',
             child: Container(
               color: Colors.black,
               constraints: const BoxConstraints(minHeight: 200),
@@ -165,10 +166,17 @@ class _ImagePageState extends State<ImagePage> {
         const SizedBox(height: 12),
         PrimaryButton(
           icon: Icons.search,
-          label: _loading
-              ? 'Analyse en cours…'
-              : 'Détecter les oiseaux',
+          label: _loading ? 'Analyse en cours…' : 'Détecter les oiseaux',
           onPressed: _image == null || _loading ? null : _detect,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Modèle : $modelName · Seuil ${(widget.settings.confidence * 100).round()} %',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
 
         if (_error != null) ...[
