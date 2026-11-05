@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 
 import 'api.dart';
+import 'camera_page.dart';
 import 'widgets.dart';
 
 class VideoPage extends StatefulWidget {
@@ -25,7 +26,71 @@ class VideoPage extends StatefulWidget {
   State<VideoPage> createState() => _VideoPageState();
 }
 
-class _VideoPageState extends State<VideoPage> {
+class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMixin {
+  late final TabController _tabCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabCtrl = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        Container(
+          color: scheme.surfaceContainer,
+          child: TabBar(
+            controller: _tabCtrl,
+            tabs: const [
+              Tab(icon: Icon(Icons.movie_outlined), text: 'Vidéo fichier'),
+              Tab(icon: Icon(Icons.videocam_outlined), text: 'Caméra live'),
+            ],
+          ),
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabCtrl,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              _VideoFileView(
+                api: widget.api,
+                confidence: widget.confidence,
+                frameStep: widget.frameStep,
+              ),
+              CameraPage(api: widget.api, confidence: widget.confidence),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _VideoFileView extends StatefulWidget {
+  const _VideoFileView({
+    required this.api,
+    required this.confidence,
+    required this.frameStep,
+  });
+
+  final RfDetrApi api;
+  final double confidence;
+  final int frameStep;
+
+  @override
+  State<_VideoFileView> createState() => _VideoFileViewState();
+}
+
+class _VideoFileViewState extends State<_VideoFileView> {
   final _picker = ImagePicker();
 
   XFile? _video;

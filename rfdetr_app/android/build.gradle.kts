@@ -3,6 +3,13 @@ allprojects {
         google()
         mavenCentral()
     }
+    afterEvaluate {
+        if (name == "camera_android_camerax") {
+            dependencies {
+                add("implementation", "androidx.concurrent:concurrent-futures:1.1.0")
+            }
+        }
+    }
 }
 
 val newBuildDir: Directory =

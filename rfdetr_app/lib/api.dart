@@ -47,6 +47,12 @@ class HistoryEntry {
   final DateTime createdAt;
 }
 
+class FrameResult {
+  const FrameResult({required this.boxes, required this.uniqueBirdCount});
+  final List<BirdBox> boxes;
+  final int uniqueBirdCount;
+}
+
 class TimedBoxes {
   const TimedBoxes(this.t, this.boxes);
 
@@ -80,7 +86,7 @@ class RfDetrApi {
     }
   }
 
-  Future<List<BirdBox>> detectFrame(
+  Future<FrameResult> detectFrame(
     List<int> jpeg, {
     required double confidence,
     String? sessionId,
@@ -94,10 +100,30 @@ class RfDetrApi {
     if (sessionId != null) request.fields['session_id'] = sessionId;
 
     final body = await _send(request, const Duration(seconds: 30));
-    return [
-      for (final b in body['boxes'] as List)
-        BirdBox.fromJson(b as Map<String, dynamic>),
-    ];
+    return FrameResult(
+      boxes: [
+        for (final b in body['boxes'] as List)
+          BirdBox.fromJson(b as Map<String, dynamic>),
+      ],
+      uniqueBirdCount: (body['unique_bird_count'] as int?) ?? 0,
+    );
+  }
+
+  Future<void> closeLiveSession(
+    String sessionId, {
+    required double confidence,
+  }) async {
+    try {
+      await http.post(
+        _uri('/api/sessions/close/'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'session_id': sessionId,
+          'model': modelId,
+          'confidence': confidence,
+        }),
+      ).timeout(const Duration(seconds: 10));
+    } catch (_) {}
   }
 
   Future<List<HistoryEntry>> fetchHistory(String token) async {
