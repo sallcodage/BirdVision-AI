@@ -82,7 +82,13 @@ class _ImagePageState extends State<ImagePage> {
               ),
         errorBuilder: (c, e, s) => const SizedBox(
           height: 120,
-          child: Center(child: Text('Impossible de charger l\'image résultat.')),
+          child: Center(
+            child: Text(
+              'Impossible de charger l\'image résultat.',
+              style: TextStyle(color: Colors.white70),
+              textAlign: TextAlign.center,
+            ),
+          ),
         ),
       );
 

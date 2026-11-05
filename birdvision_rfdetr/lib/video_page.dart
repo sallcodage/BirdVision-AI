@@ -232,6 +232,7 @@ class _VideoPageState extends State<VideoPage> {
           lerp(before.boxes[j].x2, after.boxes[j].x2),
           lerp(before.boxes[j].y2, after.boxes[j].y2),
           before.boxes[j].confidence,
+          trackerId: before.boxes[j].trackerId,
         ),
     ];
   }
@@ -394,21 +395,21 @@ class _VideoPageState extends State<VideoPage> {
             children: [
               StatTile(
                 highlight: true,
+                icon: Icons.fingerprint,
+                value: '${_result!['unique_birds'] ?? _result!['max_birds_in_frame']}',
+                label: 'oiseaux\nuniques',
+              ),
+              const SizedBox(width: 10),
+              StatTile(
                 icon: Icons.flutter_dash,
                 value: '${_result!['max_birds_in_frame']}',
-                label: 'oiseaux max\nsur une image',
+                label: 'max\nsur 1 image',
               ),
               const SizedBox(width: 10),
               StatTile(
                 icon: Icons.timer_outlined,
                 value: '${_result!['duration_seconds']} s',
-                label: 'durée\nde la vidéo',
-              ),
-              const SizedBox(width: 10),
-              StatTile(
-                icon: Icons.hourglass_bottom,
-                value: _elapsedText,
-                label: 'temps\nd\'analyse',
+                label: 'durée\nvidéo',
               ),
             ],
           ),
@@ -431,6 +432,20 @@ class _VideoPageState extends State<VideoPage> {
               ],
             ),
           ),
+          if ((_result!['birds'] as List?)?.isNotEmpty == true) ...[
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Oiseaux identifiés',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            for (final bird in (_result!['birds'] as List))
+              _BirdTrackCard(bird: bird as Map<String, dynamic>),
+          ],
         ],
       ],
     );
@@ -445,4 +460,62 @@ class _VideoPageState extends State<VideoPage> {
       ],
     ),
   );
+}
+
+class _BirdTrackCard extends StatelessWidget {
+  const _BirdTrackCard({required this.bird});
+  final Map<String, dynamic> bird;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final conf = (bird['avg_confidence'] as num).toDouble();
+    final color = confidenceColor(conf);
+    final id = bird['tracker_id'] as int;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: color.withValues(alpha: 0.15),
+            child: Text(
+              '#${id.toString().padLeft(3, '0')}',
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w800,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Bird #${id.toString().padLeft(3, '0')}',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  '${bird['frame_count']} frames · moy. ${(conf * 100).round()}% · max ${((bird['max_confidence'] as num) * 100).round()}%',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

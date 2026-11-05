@@ -6,6 +6,11 @@ from torchvision.models.detection import (
 )
 from torchvision.transforms.functional import to_tensor
 
+# Utiliser tous les cœurs CPU disponibles
+torch.set_num_threads(torch.get_num_threads())
+
+_MAX_SIDE = 800  # redimensionnement avant inférence pour accélérer
+
 
 class FasterRcnnModel:
     """
@@ -46,18 +51,31 @@ class FasterRcnnModel:
         - image annotée
         """
 
-        image = Image.open(
+        original_image = Image.open(
             image_path
         ).convert("RGB")
 
-        image_tensor = to_tensor(image).to(self.device)
+        # Redimensionner pour l'inférence (accélère sur CPU)
+        w, h = original_image.size
+        scale = _MAX_SIDE / max(w, h)
+        if scale < 1.0:
+            infer_image = original_image.resize(
+                (int(w * scale), int(h * scale)),
+                Image.BILINEAR
+            )
+        else:
+            scale = 1.0
+            infer_image = original_image
+
+        image_tensor = to_tensor(infer_image).to(self.device)
 
         with torch.no_grad():
             output = self.model([image_tensor])[0]
 
         detections = []
 
-        draw = ImageDraw.Draw(image)
+        # Annoter l'image originale (pleine résolution)
+        draw = ImageDraw.Draw(original_image)
 
         for label, box, score in zip(
             output["labels"],
@@ -73,7 +91,7 @@ class FasterRcnnModel:
                 continue
 
             x1, y1, x2, y2 = [
-                float(value)
+                float(value) / scale
                 for value in box.tolist()
             ]
 
@@ -107,7 +125,7 @@ class FasterRcnnModel:
             )
 
         if save_path:
-            image.save(save_path)
+            original_image.save(save_path)
 
         return {
             "bird_count": len(detections),

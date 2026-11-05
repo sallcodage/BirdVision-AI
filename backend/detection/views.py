@@ -12,7 +12,8 @@ import numpy as np
 from PIL import Image, ImageOps
 
 from django.conf import settings
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 
@@ -21,6 +22,8 @@ from rfdetr import RFDETRSmall
 
 from .dfine_model import DfineModel
 from .fasterrcnn_model import FasterRcnnModel
+from .models import Detection, TrackedBird, TrackingSession
+from .tracker import BirdTracker
 
 
 # ============================================
@@ -113,10 +116,31 @@ print("Faster R-CNN chargé avec succès !")
 
 
 # ============================================
+# SAUVEGARDE D'UNE ANALYSE EN BASE
+# ============================================
+
+def _save_detection(request, model_name, confidence, bird_count, detections_data, filename):
+    try:
+        detection = Detection(
+            user=request.user if request.user.is_authenticated else None,
+            model=model_name,
+            confidence_threshold=confidence,
+            bird_count=bird_count,
+            detections=detections_data,
+        )
+        detection.image = "uploads/" + filename
+        detection.result_image = "results/" + filename
+        detection.save()
+    except Exception:
+        pass  # Ne jamais bloquer la réponse si la sauvegarde échoue.
+
+
+# ============================================
 # API DE DÉTECTION D'IMAGES
 # ============================================
 
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def detect_birds(request):
 
     image = request.FILES.get("image")
@@ -331,6 +355,7 @@ def detect_birds(request):
                 settings.MEDIA_URL + "results/" + filename
             )
 
+            _save_detection(request, model_name, confidence, len(detections), detections, filename)
             return Response(
                 {
                     "success": True,
@@ -380,6 +405,7 @@ def detect_birds(request):
             settings.MEDIA_URL + "results/" + filename
         )
 
+        _save_detection(request, model_name, confidence, model_result["bird_count"], model_result["detections"], filename)
         return Response(
             {
                 "success": True,
@@ -514,6 +540,7 @@ def detect_birds(request):
     # RÉPONSE API
     # ========================================
 
+    _save_detection(request, model_name, confidence, len(detections), detections, filename)
     return Response(
         {
             "success": True,
@@ -525,6 +552,51 @@ def detect_birds(request):
         },
         status=status.HTTP_200_OK
     )
+
+
+# ============================================
+# HISTORIQUE DES ANALYSES
+# ============================================
+
+@api_view(["GET"])
+def detection_history(request):
+    """
+    GET /api/history/
+    Retourne les 50 dernières analyses de l'utilisateur authentifié.
+    Nécessite : Authorization: Token <token>
+    """
+    if not request.user.is_authenticated:
+        return Response(
+            {"error": "Authentification requise."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    qs = (
+        Detection.objects
+        .filter(user=request.user)
+        .order_by("-created_at")[:50]
+    )
+
+    history = []
+    for d in qs:
+        result_image_url = None
+        if d.result_image:
+            try:
+                result_image_url = request.build_absolute_uri(d.result_image.url)
+            except Exception:
+                pass
+
+        history.append({
+            "id": d.pk,
+            "model": d.model,
+            "confidence_threshold": d.confidence_threshold,
+            "bird_count": d.bird_count,
+            "detections": d.detections,
+            "result_image": result_image_url,
+            "created_at": d.created_at.isoformat(),
+        })
+
+    return Response({"history": history, "count": len(history)})
 
 
 # ============================================
@@ -690,7 +762,10 @@ def _detect_frame(
 
 def _draw_boxes(frame, boxes):
 
-    for x1, y1, x2, y2, score in boxes:
+    for box in boxes:
+        x1, y1, x2, y2, score = box[:5]
+        tid = box[5] if len(box) > 5 else None
+        label = f"#{tid} {score * 100:.0f}%" if tid is not None else f"bird {score * 100:.1f}%"
 
         cv2.rectangle(
             frame,
@@ -702,7 +777,7 @@ def _draw_boxes(frame, boxes):
 
         cv2.putText(
             frame,
-            f"bird {score * 100:.1f}%",
+            label,
             (x1, max(y1 - 10, 20)),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
@@ -718,20 +793,22 @@ def _draw_boxes(frame, boxes):
 def _normalize_boxes(boxes, width, height):
     """
     Convertit les coordonnées entre 0 et 1.
-    L'application peut ainsi placer les boîtes
-    sur un aperçu quelle que soit sa taille.
+    Le 6e élément optionnel est le tracker_id.
     """
-
-    return [
-        {
+    result = []
+    for box in boxes:
+        x1, y1, x2, y2, score = box[:5]
+        entry = {
             "x1": round(x1 / width, 4),
             "y1": round(y1 / height, 4),
             "x2": round(x2 / width, 4),
             "y2": round(y2 / height, 4),
             "confidence": round(score, 4),
         }
-        for x1, y1, x2, y2, score in boxes
-    ]
+        if len(box) > 5 and box[5] is not None:
+            entry["tracker_id"] = int(box[5])
+        result.append(entry)
+    return result
 
 
 # ============================================
@@ -745,10 +822,44 @@ frame_locks = {
 
 
 # ============================================
+# TRACKERS PERSISTANTS POUR LA CAMÉRA LIVE
+# ============================================
+
+live_sessions = {}
+live_sessions_lock = threading.Lock()
+_SESSION_TIMEOUT = 10.0  # secondes sans frame → tracker supprimé
+
+
+def _get_live_tracker(session_id, fps=10):
+    now = time.time()
+    with live_sessions_lock:
+        stale = [
+            sid for sid, s in live_sessions.items()
+            if now - s["last_seen"] > _SESSION_TIMEOUT
+        ]
+        for sid in stale:
+            del live_sessions[sid]
+
+        if session_id not in live_sessions:
+            tracker = BirdTracker(max_lost=90)
+            live_sessions[session_id] = {
+                "tracker": tracker,
+                "last_seen": now,
+                "birds": {},        # tracker_id -> {frame_count, total_conf, max_conf, last_box}
+                "all_ids": set(),   # tous les IDs vus
+            }
+        else:
+            live_sessions[session_id]["last_seen"] = now
+
+        return live_sessions[session_id]
+
+
+# ============================================
 # API DE DÉTECTION EN DIRECT
 # ============================================
 
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def detect_frame(request):
     """
     Détection en direct sur une image de la caméra.
@@ -830,12 +941,14 @@ def detect_frame(request):
         exist_ok=True
     )
 
+    session_id = request.data.get("session_id") or None
+
     started = time.perf_counter()
 
     try:
         with frame_locks[model_name]:
 
-            boxes = _detect_frame(
+            raw_boxes = _detect_frame(
                 model_name,
                 models[model_name],
                 frame,
@@ -853,12 +966,36 @@ def detect_frame(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
+    # Appliquer BirdTracker si une session est active
+    unique_count = 0
+    if session_id:
+        session_data = _get_live_tracker(session_id)
+        tracker = session_data["tracker"]
+        boxes = tracker.update(raw_boxes)
+        for box in boxes:
+            tid = box[5]
+            session_data["all_ids"].add(tid)
+            bird = session_data["birds"].setdefault(tid, {
+                "frame_count": 0,
+                "total_conf": 0.0,
+                "max_conf": 0.0,
+                "last_box": None,
+            })
+            bird["frame_count"] += 1
+            bird["total_conf"] += box[4]
+            bird["max_conf"] = max(bird["max_conf"], box[4])
+            bird["last_box"] = box[:4]
+        unique_count = tracker.unique_ids_seen
+    else:
+        boxes = raw_boxes
+
     return Response(
         {
             "success": True,
             "model": model_name,
             "width": width,
             "height": height,
+            "unique_bird_count": unique_count,
             "boxes": _normalize_boxes(
                 boxes,
                 width,
@@ -870,6 +1007,76 @@ def detect_frame(request):
         },
         status=status.HTTP_200_OK
     )
+
+
+# ============================================
+# FERMETURE D'UNE SESSION LIVE
+# ============================================
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def close_live_session(request):
+    """
+    POST /api/sessions/close/
+    Ferme une session caméra live et sauvegarde les données en base.
+    Body: { "session_id": "...", "model": "...", "confidence": 0.40 }
+    """
+    from django.utils import timezone
+
+    session_id = request.data.get("session_id")
+    if not session_id:
+        return Response({"error": "session_id manquant."}, status=status.HTTP_400_BAD_REQUEST)
+
+    with live_sessions_lock:
+        session_data = live_sessions.pop(session_id, None)
+
+    if not session_data:
+        return Response({"error": "Session introuvable ou déjà fermée."}, status=status.HTTP_404_NOT_FOUND)
+
+    model_name = request.data.get("model", "rfdetr-s")
+    confidence = float(request.data.get("confidence", 0.40))
+    birds_data = session_data.get("birds", {})
+    all_ids = session_data.get("all_ids", set())
+
+    try:
+        db_session = TrackingSession.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            session_id=session_id,
+            source="live",
+            model=model_name,
+            confidence_threshold=confidence,
+            unique_bird_count=len(all_ids),
+            total_detections=sum(b["frame_count"] for b in birds_data.values()),
+            status="done",
+            ended_at=timezone.now(),
+        )
+
+        for tid, bird in birds_data.items():
+            avg_conf = bird["total_conf"] / bird["frame_count"] if bird["frame_count"] else 0
+            last_box = bird["last_box"] or (0, 0, 0, 0)
+            TrackedBird.objects.create(
+                session=db_session,
+                tracker_id=tid,
+                frame_count=bird["frame_count"],
+                total_confidence=bird["total_conf"],
+                avg_confidence=round(avg_conf, 4),
+                max_confidence=round(bird["max_conf"], 4),
+                last_x1=last_box[0],
+                last_y1=last_box[1],
+                last_x2=last_box[2],
+                last_y2=last_box[3],
+                status="done",
+            )
+    except Exception as e:
+        return Response({"error": "Erreur sauvegarde session.", "details": str(e)},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return Response({
+        "success": True,
+        "session_id": session_id,
+        "unique_bird_count": len(all_ids),
+        "birds_saved": len(birds_data),
+    })
 
 
 # ============================================
@@ -926,6 +1133,50 @@ def _update_job(job_id, **fields):
 
     with video_jobs_lock:
         video_jobs[job_id].update(fields)
+
+
+# ============================================
+# SAUVEGARDE SESSION + OISEAUX EN BASE
+# ============================================
+
+def _save_tracking_session(
+    job_id, model_name, confidence, source,
+    unique_count, total_detections, duration_seconds,
+    fps, result_video, birds_stats
+):
+    from django.utils import timezone
+    try:
+        db_session = TrackingSession.objects.create(
+            session_id=job_id,
+            source=source,
+            model=model_name,
+            confidence_threshold=confidence,
+            unique_bird_count=unique_count,
+            total_detections=total_detections,
+            duration_seconds=duration_seconds,
+            fps=fps,
+            result_video=result_video,
+            status="done",
+            ended_at=timezone.now(),
+        )
+        for tid, bird in birds_stats.items():
+            avg_conf = bird["total_conf"] / bird["frame_count"] if bird["frame_count"] else 0
+            last_box = bird["last_box"] or (0, 0, 0, 0)
+            TrackedBird.objects.create(
+                session=db_session,
+                tracker_id=tid,
+                frame_count=bird["frame_count"],
+                total_confidence=bird["total_conf"],
+                avg_confidence=round(avg_conf, 4),
+                max_confidence=round(bird["max_conf"], 4),
+                last_x1=last_box[0],
+                last_y1=last_box[1],
+                last_x2=last_box[2],
+                last_y2=last_box[3],
+                status="done",
+            )
+    except Exception as e:
+        print(f"[BirdVision] Erreur sauvegarde session {job_id}: {e}")
 
 
 # ============================================
@@ -1004,6 +1255,10 @@ def _run_video_job(
         total_birds = 0
         max_birds_in_frame = 0
         last_boxes = []
+        all_tracker_ids = set()
+        birds_stats = {}  # tracker_id -> {frame_count, total_conf, max_conf, last_box}
+
+        tracker = BirdTracker(max_lost=90)
 
         with video_inference_lock:
 
@@ -1021,7 +1276,7 @@ def _run_video_job(
 
                 if frame_count % frame_step == 0:
 
-                    last_boxes = _detect_frame(
+                    raw_boxes = _detect_frame(
                         model_name,
                         model,
                         frame,
@@ -1029,6 +1284,22 @@ def _run_video_job(
                         video_dir,
                         job_id
                     )
+
+                    # Appliquer BirdTracker pour assigner des IDs persistants.
+                    last_boxes = tracker.update(raw_boxes)
+                    for box in last_boxes:
+                        tid = box[5]
+                        all_tracker_ids.add(tid)
+                        bird = birds_stats.setdefault(tid, {
+                            "frame_count": 0,
+                            "total_conf": 0.0,
+                            "max_conf": 0.0,
+                            "last_box": None,
+                        })
+                        bird["frame_count"] += 1
+                        bird["total_conf"] += box[4]
+                        bird["max_conf"] = max(bird["max_conf"], box[4])
+                        bird["last_box"] = box[:4]
 
                     # Enregistrer les détections pour l'application.
                     with video_jobs_lock:
@@ -1091,6 +1362,35 @@ def _run_video_job(
                 output_path
             )
 
+        duration_sec = round(frame_count / fps, 2)
+        unique_count = len(all_tracker_ids)
+
+        # Sauvegarder session + oiseaux en base
+        _save_tracking_session(
+            job_id=job_id,
+            model_name=model_name,
+            confidence=confidence,
+            source="video",
+            unique_count=unique_count,
+            total_detections=total_birds,
+            duration_seconds=duration_sec,
+            fps=fps,
+            result_video=settings.MEDIA_URL + "videos/results/" + os.path.basename(output_path),
+            birds_stats=birds_stats,
+        )
+
+        # Construire la liste des oiseaux pour la réponse API
+        birds_list = []
+        for tid, bird in sorted(birds_stats.items()):
+            avg_conf = bird["total_conf"] / bird["frame_count"] if bird["frame_count"] else 0
+            birds_list.append({
+                "tracker_id": tid,
+                "label": f"Bird #{tid:03d}",
+                "frame_count": bird["frame_count"],
+                "avg_confidence": round(avg_conf, 4),
+                "max_confidence": round(bird["max_conf"], 4),
+            })
+
         _update_job(
             job_id,
             status="done",
@@ -1101,12 +1401,11 @@ def _run_video_job(
                 "frame_step": frame_step,
                 "frames_total": frame_count,
                 "frames_analyzed": analyzed_frames,
-                "duration_seconds": round(
-                    frame_count / fps,
-                    2
-                ),
+                "duration_seconds": duration_sec,
                 "total_bird_detections": total_birds,
+                "unique_birds": unique_count,
                 "max_birds_in_frame": max_birds_in_frame,
+                "birds": birds_list,
                 "result_path": (
                     settings.MEDIA_URL
                     + "videos/results/"
@@ -1142,6 +1441,7 @@ def _run_video_job(
 # ============================================
 
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def detect_video(request):
     """
     Lance l'analyse d'une vidéo.
@@ -1337,6 +1637,7 @@ def detect_video(request):
 # ============================================
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def video_job_status(request, job_id):
     """
     État d'une analyse :
@@ -1407,3 +1708,91 @@ def _job_response(request, job_id):
         body,
         status=status.HTTP_200_OK
     )
+
+
+# ============================================
+# LISTE DES SESSIONS DE TRACKING
+# ============================================
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def tracking_sessions(request):
+    """
+    GET /api/sessions/
+    50 dernières sessions (live + vidéo). Token optionnel.
+    """
+    qs = TrackingSession.objects.order_by("-created_at")
+
+    if request.user.is_authenticated:
+        qs = qs.filter(user=request.user)
+
+    qs = qs[:50]
+
+    data = []
+    for s in qs:
+        data.append({
+            "id": s.pk,
+            "session_id": s.session_id,
+            "source": s.source,
+            "model": s.model,
+            "confidence_threshold": s.confidence_threshold,
+            "unique_bird_count": s.unique_bird_count,
+            "total_detections": s.total_detections,
+            "duration_seconds": s.duration_seconds,
+            "status": s.status,
+            "result_video": request.build_absolute_uri(s.result_video) if s.result_video else None,
+            "created_at": s.created_at.isoformat(),
+        })
+
+    return Response({"sessions": data, "count": len(data)})
+
+
+# ============================================
+# DÉTAIL D'UNE SESSION + OISEAUX
+# ============================================
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def tracking_session_detail(request, session_id):
+    """
+    GET /api/sessions/<session_id>/
+    Détail de la session + liste de tous les oiseaux trackés.
+    """
+    try:
+        s = TrackingSession.objects.get(session_id=session_id)
+    except TrackingSession.DoesNotExist:
+        return Response({"error": "Session introuvable."}, status=status.HTTP_404_NOT_FOUND)
+
+    birds = []
+    for b in s.birds.order_by("tracker_id"):
+        birds.append({
+            "tracker_id": b.tracker_id,
+            "label": f"Bird #{b.tracker_id:03d}",
+            "frame_count": b.frame_count,
+            "avg_confidence": b.avg_confidence,
+            "max_confidence": b.max_confidence,
+            "last_box": {
+                "x1": b.last_x1, "y1": b.last_y1,
+                "x2": b.last_x2, "y2": b.last_y2,
+            },
+            "status": b.status,
+            "first_seen": b.first_seen.isoformat(),
+            "last_seen": b.last_seen.isoformat(),
+        })
+
+    return Response({
+        "id": s.pk,
+        "session_id": s.session_id,
+        "source": s.source,
+        "model": s.model,
+        "confidence_threshold": s.confidence_threshold,
+        "unique_bird_count": s.unique_bird_count,
+        "total_detections": s.total_detections,
+        "duration_seconds": s.duration_seconds,
+        "fps": s.fps,
+        "status": s.status,
+        "result_video": request.build_absolute_uri(s.result_video) if s.result_video else None,
+        "created_at": s.created_at.isoformat(),
+        "ended_at": s.ended_at.isoformat() if s.ended_at else None,
+        "birds": birds,
+    })

@@ -44,7 +44,7 @@ function Register({ onGoToLogin }) {
 
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/api/auth/register/",
+        `${import.meta.env.VITE_API_URL}/api/auth/register/`,
         {
           method: "POST",
           headers: {

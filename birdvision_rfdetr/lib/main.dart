@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'api.dart';
 import 'brand.dart';
+import 'camera_page.dart';
+import 'history_page.dart';
 import 'image_page.dart';
 import 'video_page.dart';
 
@@ -54,7 +56,8 @@ class _HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<_HomePage> {
-  String _serverUrl = 'http://127.0.0.1:8000';
+  String _serverUrl = 'https://splicing-gumball-unglazed.ngrok-free.dev';
+  String _token = '';
   double _confidence = 0.25;
   int _frameStep = 15;
   int _tab = 0;
@@ -76,6 +79,7 @@ class _HomePageState extends State<_HomePage> {
 
   Future<void> _openSettings() async {
     final urlController = TextEditingController(text: _serverUrl);
+    final tokenController = TextEditingController(text: _token);
     double confidence = _confidence;
     int frameStep = _frameStep;
     String? pingResult;
@@ -163,6 +167,16 @@ class _HomePageState extends State<_HomePage> {
                 onChanged: (v) => setSheet(() => frameStep = v.round()),
               ),
               _Hint('Plus le nombre est grand, plus l\'analyse est rapide'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: tokenController,
+                decoration: InputDecoration(
+                  labelText: 'Token d\'authentification',
+                  hintText: 'Votre token Django REST',
+                  prefixIcon: const Icon(Icons.vpn_key_outlined),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -176,6 +190,7 @@ class _HomePageState extends State<_HomePage> {
                   onPressed: () {
                     setState(() {
                       _serverUrl = urlController.text.trim();
+                      _token = tokenController.text.trim();
                       _confidence = confidence;
                       _frameStep = frameStep;
                     });
@@ -271,12 +286,14 @@ class _HomePageState extends State<_HomePage> {
             child: IndexedStack(
               index: _tab,
               children: [
+                CameraPage(api: _api, confidence: _confidence),
                 ImagePage(api: _api, confidence: _confidence),
                 VideoPage(
                   api: _api,
                   confidence: _confidence,
                   frameStep: _frameStep,
                 ),
+                HistoryPage(api: _api, token: _token),
               ],
             ),
           ),
@@ -287,14 +304,24 @@ class _HomePageState extends State<_HomePage> {
         onDestinationSelected: (i) => setState(() => _tab = i),
         destinations: const [
           NavigationDestination(
+            icon: Icon(Icons.videocam_outlined),
+            selectedIcon: Icon(Icons.videocam),
+            label: 'Caméra',
+          ),
+          NavigationDestination(
             icon: Icon(Icons.photo_outlined),
             selectedIcon: Icon(Icons.photo),
             label: 'Image',
           ),
           NavigationDestination(
-            icon: Icon(Icons.videocam_outlined),
-            selectedIcon: Icon(Icons.videocam),
+            icon: Icon(Icons.movie_outlined),
+            selectedIcon: Icon(Icons.movie),
             label: 'Vidéo',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
+            label: 'Historique',
           ),
         ],
       ),

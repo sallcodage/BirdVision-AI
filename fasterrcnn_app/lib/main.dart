@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'api.dart';
 import 'brand.dart';
+import 'history_page.dart';
 import 'image_page.dart';
+import 'live_page.dart';
 import 'video_page.dart';
 
 void main() => runApp(const FasterRcnnApp());
@@ -47,19 +49,13 @@ class FasterRcnnApp extends StatelessWidget {
   }
 }
 
-/// Réglages partagés entre les pages Image et Vidéo.
+/// Réglages partagés entre les pages Image, Vidéo, Live et Historique.
 class Settings {
-  // Adresse Wi-Fi du PC qui fait tourner Django.
-  String serverUrl = 'http://192.168.1.12:8000';
-
-  // Modèle utilisé pour les photos et les vidéos.
+  String serverUrl = 'https://splicing-gumball-unglazed.ngrok-free.dev';
   String model = BirdVisionApi.model;
-
-  // RF-DETR-S accepte les seuils dès 0.09 côté API.
   double confidence = 0.50;
-
-  // Vidéo : analyser 1 image sur N.
   int frameStep = 15;
+  String token = '';
 
   BirdVisionApi get api => BirdVisionApi(serverUrl);
 }
@@ -92,6 +88,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _openSettings() async {
     final urlController = TextEditingController(text: settings.serverUrl);
+    final tokenController = TextEditingController(text: settings.token);
     String model = settings.model;
     double confidence = settings.confidence;
     int frameStep = settings.frameStep;
@@ -213,6 +210,16 @@ class _HomePageState extends State<HomePage> {
               const _Hint(
                 'Plus le nombre est grand, plus l\'analyse est rapide',
               ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: tokenController,
+                decoration: InputDecoration(
+                  labelText: 'Token d\'authentification',
+                  hintText: 'Votre token Django REST',
+                  prefixIcon: const Icon(Icons.vpn_key_outlined),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -226,6 +233,7 @@ class _HomePageState extends State<HomePage> {
                   onPressed: () {
                     setState(() {
                       settings.serverUrl = urlController.text.trim();
+                      settings.token = tokenController.text.trim();
                       settings.model = model;
                       settings.confidence = confidence;
                       settings.frameStep = frameStep;
@@ -260,6 +268,8 @@ class _HomePageState extends State<HomePage> {
               children: [
                 ImagePage(settings: settings),
                 VideoPage(settings: settings),
+                LivePage(settings: settings),
+                HistoryPage(settings: settings),
               ],
             ),
           ),
@@ -278,6 +288,16 @@ class _HomePageState extends State<HomePage> {
             icon: Icon(Icons.videocam_outlined),
             selectedIcon: Icon(Icons.videocam),
             label: 'Vidéo',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.camera_outlined),
+            selectedIcon: Icon(Icons.camera),
+            label: 'Direct',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
+            label: 'Historique',
           ),
         ],
       ),

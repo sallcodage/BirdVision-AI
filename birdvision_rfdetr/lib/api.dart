@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart' show XFile;
 
 class BirdBox {
-  const BirdBox(this.x1, this.y1, this.x2, this.y2, this.confidence);
+  const BirdBox(this.x1, this.y1, this.x2, this.y2, this.confidence, {this.trackerId});
 
   factory BirdBox.fromJson(Map<String, dynamic> j) => BirdBox(
     (j['x1'] as num).toDouble(),
@@ -13,9 +13,38 @@ class BirdBox {
     (j['x2'] as num).toDouble(),
     (j['y2'] as num).toDouble(),
     (j['confidence'] as num).toDouble(),
+    trackerId: j['tracker_id'] as int?,
   );
 
   final double x1, y1, x2, y2, confidence;
+  final int? trackerId;
+}
+
+class HistoryEntry {
+  const HistoryEntry({
+    required this.id,
+    required this.model,
+    required this.confidenceThreshold,
+    required this.birdCount,
+    required this.resultImage,
+    required this.createdAt,
+  });
+
+  factory HistoryEntry.fromJson(Map<String, dynamic> j) => HistoryEntry(
+    id: j['id'] as int,
+    model: j['model'] as String,
+    confidenceThreshold: (j['confidence_threshold'] as num).toDouble(),
+    birdCount: j['bird_count'] as int,
+    resultImage: j['result_image'] as String?,
+    createdAt: DateTime.parse(j['created_at'] as String).toLocal(),
+  );
+
+  final int id;
+  final String model;
+  final double confidenceThreshold;
+  final int birdCount;
+  final String? resultImage;
+  final DateTime createdAt;
 }
 
 class TimedBoxes {
@@ -51,6 +80,38 @@ class RfDetrApi {
     }
   }
 
+  Future<Map<String, dynamic>> detectFrame(
+    List<int> jpeg, {
+    required double confidence,
+    String? sessionId,
+  }) async {
+    final request = http.MultipartRequest('POST', _uri('/api/detect-frame/'))
+      ..fields['model'] = modelId
+      ..fields['confidence'] = confidence.toStringAsFixed(2)
+      ..files.add(
+        http.MultipartFile.fromBytes('image', jpeg, filename: 'frame.jpg'),
+      );
+    if (sessionId != null) request.fields['session_id'] = sessionId;
+
+    return _send(request, const Duration(seconds: 30));
+  }
+
+  Future<List<HistoryEntry>> fetchHistory(String token) async {
+    final r = await http.get(
+      _uri('/api/history/'),
+      headers: {'Authorization': 'Token $token'},
+    ).timeout(const Duration(seconds: 15));
+
+    if (r.statusCode == 401) throw Exception('Token invalide. Vérifiez vos réglages.');
+    if (r.statusCode != 200) throw Exception('Erreur serveur (${r.statusCode}).');
+
+    final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+    return [
+      for (final e in body['history'] as List)
+        HistoryEntry.fromJson(e as Map<String, dynamic>),
+    ];
+  }
+
   Future<Map<String, dynamic>> detectImage(
     XFile file, {
     required double confidence,
@@ -61,6 +122,24 @@ class RfDetrApi {
       ..files.add(await _multipart('image', file));
 
     return _send(request, const Duration(minutes: 2));
+  }
+
+  Future<void> closeLiveSession(
+    String sessionId, {
+    required String model,
+    required double confidence,
+  }) async {
+    try {
+      await http.post(
+        _uri('/api/sessions/close/'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'session_id': sessionId,
+          'model': model,
+          'confidence': confidence,
+        }),
+      ).timeout(const Duration(seconds: 10));
+    } catch (_) {}
   }
 
   Future<Map<String, dynamic>> detectVideo(

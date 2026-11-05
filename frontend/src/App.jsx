@@ -417,7 +417,7 @@ const [authToken, setAuthToken] = useState(null);
     try {
 
       const response = await fetch(
-  "http://127.0.0.1:8000/api/detect/",
+  `${import.meta.env.VITE_API_URL}/api/detect/`,
   {
     method: "POST",
 
@@ -619,7 +619,7 @@ const [authToken, setAuthToken] = useState(null);
 
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/api/detect-video/",
+        `${import.meta.env.VITE_API_URL}/api/detect-video/`,
         {
           method: "POST",
           headers: { Authorization: `Token ${authToken}` },
@@ -647,7 +647,7 @@ const [authToken, setAuthToken] = useState(null);
         await new Promise((r) => setTimeout(r, 1500));
 
         const pollRes = await fetch(
-          `http://127.0.0.1:8000/api/detect-video/${jobId}/`,
+          `${import.meta.env.VITE_API_URL}/api/detect-video/${jobId}/`,
           { headers: { Authorization: `Token ${authToken}` } }
         );
         const pollData = await pollRes.json();
@@ -2645,15 +2645,36 @@ if (!isAuthenticated) {
                     </div>
                   )}
                   {!videoLoading && !videoError && videoResult && (
-                    <div className="result-message success-result">
-                      <div className="result-message-icon">&#10003;</div>
-                      <div>
-                        <strong>Vidéo analysée avec succès</strong>
-                        <span>
-                          {videoResult.total_bird_detections} détection(s) &middot; max {videoResult.max_birds_in_frame} oiseau(x)/image &middot; {videoResult.frames_analyzed}/{videoResult.frames_total} images analysées avec {selectedModelName}.
-                        </span>
+                    <>
+                      {videoResult.result_video && (
+                        <div className="result-image-wrapper">
+                          <video
+                            src={videoResult.result_video}
+                            controls
+                            autoPlay
+                            loop
+                            muted
+                            className="result-image"
+                            style={{ width: "100%", borderRadius: "8px" }}
+                          />
+                          <div className="result-image-label">
+                            <span></span>Vidéo annotée {selectedModelName}
+                          </div>
+                        </div>
+                      )}
+                      <div className="result-message success-result">
+                        <div className="result-message-icon">&#10003;</div>
+                        <div>
+                          <strong>Vidéo analysée avec succès</strong>
+                          <span>
+                            {videoResult.unique_birds != null
+                              ? `${videoResult.unique_birds} oiseau(x) unique(s) · `
+                              : ""}
+                            {videoResult.total_bird_detections} détection(s) &middot; {videoResult.frames_analyzed}/{videoResult.frames_total} images avec {selectedModelName}.
+                          </span>
+                        </div>
                       </div>
-                    </div>
+                    </>
                   )}
                 </div>
               </article>
@@ -2665,6 +2686,15 @@ if (!isAuthenticated) {
           {/* VIDEO STATS */}
           {activeTab === "video" && videoResult && (
             <div className="stats-grid">
+              {videoResult.unique_birds != null && (
+                <div className="stat-card">
+                  <div className="stat-icon">&#128031;</div>
+                  <div>
+                    <span>Oiseaux uniques</span>
+                    <strong>{videoResult.unique_birds}</strong>
+                  </div>
+                </div>
+              )}
               <div className="stat-card">
                 <div className="stat-icon">01</div>
                 <div>

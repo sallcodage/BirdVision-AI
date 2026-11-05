@@ -230,6 +230,7 @@ class _VideoPageState extends State<VideoPage> {
           lerp(before.boxes[j].x2, after.boxes[j].x2),
           lerp(before.boxes[j].y2, after.boxes[j].y2),
           before.boxes[j].confidence,
+          trackerId: before.boxes[j].trackerId,
         ),
     ];
   }
@@ -400,8 +401,12 @@ class _VideoPageState extends State<VideoPage> {
               StatTile(
                 highlight: true,
                 icon: Icons.flutter_dash,
-                value: '${_result!['max_birds_in_frame']}',
-                label: 'oiseaux max\nsur une image',
+                value: _result!['unique_bird_count'] != null
+                    ? '${_result!['unique_bird_count']}'
+                    : _result!['unique_birds'] != null
+                        ? '${_result!['unique_birds']}'
+                        : '${_result!['max_birds_in_frame'] ?? 0}',
+                label: 'oiseaux\nuniques',
               ),
               const SizedBox(width: 10),
               StatTile(
@@ -439,6 +444,20 @@ class _VideoPageState extends State<VideoPage> {
               ],
             ),
           ),
+          // ── Liste des oiseaux trackés ───────────────────────────
+          if ((_result!['birds'] as List?)?.isNotEmpty == true) ...[
+            const SizedBox(height: 20),
+            Text(
+              'Oiseaux identifiés',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            for (final bird in _result!['birds'] as List)
+              _BirdCard(bird as Map<String, dynamic>, scheme: scheme),
+          ],
         ],
       ],
     );
@@ -453,4 +472,64 @@ class _VideoPageState extends State<VideoPage> {
       ],
     ),
   );
+}
+
+class _BirdCard extends StatelessWidget {
+  const _BirdCard(this.bird, {required this.scheme});
+
+  final Map<String, dynamic> bird;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final id = bird['tracker_id'] as int? ?? 0;
+    final frames = bird['frame_count'] as int? ?? 0;
+    final avg = ((bird['avg_confidence'] as num?)?.toDouble() ?? 0) * 100;
+    final max = ((bird['max_confidence'] as num?)?.toDouble() ?? 0) * 100;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: scheme.primaryContainer,
+            child: Text(
+              '#$id',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+                color: scheme.onPrimaryContainer,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Oiseau #$id',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$frames image${frames > 1 ? 's' : ''} · moy ${avg.toStringAsFixed(0)} % · max ${max.toStringAsFixed(0)} %',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

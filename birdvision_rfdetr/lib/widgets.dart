@@ -39,9 +39,13 @@ class _BoxPainter extends CustomPainter {
           ..strokeWidth = 3,
       );
 
+      final id = b.trackerId;
+      final labelText = id != null
+          ? ' #${id.toString().padLeft(3, '0')} ${(b.confidence * 100).round()}% '
+          : ' ${(b.confidence * 100).round()}% ';
       final label = TextPainter(
         text: TextSpan(
-          text: ' oiseau ${(b.confidence * 100).round()} % ',
+          text: labelText,
           style: TextStyle(
             color: Colors.white,
             backgroundColor: color,

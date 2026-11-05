@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'api.dart';
 import 'brand.dart';
+import 'history_page.dart';
 import 'image_page.dart';
 import 'video_page.dart';
 
@@ -47,12 +48,13 @@ class BirdVisionApp extends StatelessWidget {
   }
 }
 
-/// Réglages partagés entre les pages Image et Vidéo.
+/// Réglages partagés entre les pages Image, Vidéo et Historique.
 class Settings {
-  String serverUrl = 'http://192.168.1.12:8000/';
+  String serverUrl = 'https://splicing-gumball-unglazed.ngrok-free.dev';
   double confidence = 0.40;
   int frameStep = 15;
   String model = BirdVisionApi.rfdetrModel;
+  String token = '';
 
   BirdVisionApi get api => BirdVisionApi(serverUrl);
 
@@ -91,6 +93,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _openSettings() async {
     final urlController = TextEditingController(text: settings.serverUrl);
+    final tokenController = TextEditingController(text: settings.token);
     double confidence = settings.confidence;
     int frameStep = settings.frameStep;
     String model = settings.model;
@@ -157,6 +160,22 @@ class _HomePageState extends State<HomePage> {
                   ],
                 ),
 
+                const SizedBox(height: 20),
+
+                // ---------- Token d'authentification ----------
+                TextField(
+                  controller: tokenController,
+                  keyboardType: TextInputType.visiblePassword,
+                  decoration: InputDecoration(
+                    labelText: 'Token d\'authentification',
+                    hintText: 'Collé depuis la réponse de connexion',
+                    prefixIcon: const Icon(Icons.key_outlined),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+
                 const SizedBox(height: 24),
 
                 // ---------- Modèle de détection ----------
@@ -219,6 +238,7 @@ class _HomePageState extends State<HomePage> {
                     onPressed: () {
                       setState(() {
                         settings.serverUrl = urlController.text.trim();
+                        settings.token = tokenController.text.trim();
                         settings.confidence = confidence;
                         settings.frameStep = frameStep;
                         settings.model = model;
@@ -254,6 +274,7 @@ class _HomePageState extends State<HomePage> {
               children: [
                 ImagePage(settings: settings),
                 VideoPage(settings: settings),
+                HistoryPage(settings: settings),
               ],
             ),
           ),
@@ -272,6 +293,11 @@ class _HomePageState extends State<HomePage> {
             icon: Icon(Icons.videocam_outlined),
             selectedIcon: Icon(Icons.videocam),
             label: 'Vidéo',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
+            label: 'Historique',
           ),
         ],
       ),

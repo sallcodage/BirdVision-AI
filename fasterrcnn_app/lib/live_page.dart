@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -29,6 +31,13 @@ class _LivePageState extends State<LivePage> with WidgetsBindingObserver {
   late String _model;
   Duration? _lastTime;
 
+  String _sessionId = _newSessionId();
+
+  static String _newSessionId() {
+    final rng = Random();
+    return List.generate(16, (_) => rng.nextInt(16).toRadixString(16)).join();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +51,11 @@ class _LivePageState extends State<LivePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _running = false;
     _camera?.dispose();
+    widget.settings.api.closeLiveSession(
+      _sessionId,
+      model: _model,
+      confidence: widget.settings.confidence,
+    );
     super.dispose();
   }
 
@@ -105,6 +119,7 @@ class _LivePageState extends State<LivePage> with WidgetsBindingObserver {
           await picture.readAsBytes(),
           confidence: widget.settings.confidence,
           model: _model,
+          sessionId: _sessionId,
         );
 
         if (!mounted || _camera != camera) return;
@@ -123,6 +138,11 @@ class _LivePageState extends State<LivePage> with WidgetsBindingObserver {
   }
 
   void _toggleModel() {
+    widget.settings.api.closeLiveSession(
+      _sessionId,
+      model: _model,
+      confidence: widget.settings.confidence,
+    );
     setState(() {
       final alternate = widget.settings.model == BirdVisionApi.fastModel
           ? BirdVisionApi.model
@@ -132,6 +152,7 @@ class _LivePageState extends State<LivePage> with WidgetsBindingObserver {
           : widget.settings.model;
       _boxes = const [];
       _lastTime = null;
+      _sessionId = _newSessionId();
     });
   }
 

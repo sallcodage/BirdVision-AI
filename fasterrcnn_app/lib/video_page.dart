@@ -254,6 +254,7 @@ class _VideoPageState extends State<VideoPage> {
           lerp(before.boxes[j].x2, after.boxes[j].x2),
           lerp(before.boxes[j].y2, after.boxes[j].y2),
           before.boxes[j].confidence,
+          trackerId: before.boxes[j].trackerId,
         ),
     ];
   }

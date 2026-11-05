@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -24,6 +26,7 @@ class _LivePageState extends State<LivePage> with WidgetsBindingObserver {
   bool _running = false;
 
   List<BirdBox> _boxes = const [];
+  int _uniqueBirdCount = 0;
 
   /// Live : RF-DETR-S ou D-FINE-X (Faster R-CNN trop lent pour le direct).
   static const _liveModels = [
@@ -33,6 +36,14 @@ class _LivePageState extends State<LivePage> with WidgetsBindingObserver {
 
   String _model = BirdVisionApi.rfdetrModel;
   Duration? _lastTime;
+
+  // ID de session unique pour le tracker persistant côté serveur
+  String _sessionId = _newSessionId();
+
+  static String _newSessionId() {
+    final rng = Random();
+    return List.generate(16, (_) => rng.nextInt(16).toRadixString(16)).join();
+  }
 
   @override
   void initState() {
@@ -46,6 +57,11 @@ class _LivePageState extends State<LivePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _running = false;
     _camera?.dispose();
+    widget.settings.api.closeLiveSession(
+      _sessionId,
+      model: _model,
+      confidence: widget.settings.confidence,
+    );
     super.dispose();
   }
 
@@ -102,15 +118,17 @@ class _LivePageState extends State<LivePage> with WidgetsBindingObserver {
       final started = DateTime.now();
       try {
         final picture = await camera.takePicture();
-        final boxes = await widget.settings.api.detectFrame(
+        final result = await widget.settings.api.detectFrame(
           await picture.readAsBytes(),
           confidence: widget.settings.confidence,
           model: _model,
+          sessionId: _sessionId,
         );
 
         if (!mounted || _camera != camera) return;
         setState(() {
-          _boxes = boxes;
+          _boxes = result.boxes;
+          _uniqueBirdCount = result.uniqueBirdCount;
           _lastTime = DateTime.now().difference(started);
           _error = null;
         });
@@ -125,11 +143,19 @@ class _LivePageState extends State<LivePage> with WidgetsBindingObserver {
   }
 
   void _toggleModel() {
+    // Ferme la session courante avant d'en créer une nouvelle
+    widget.settings.api.closeLiveSession(
+      _sessionId,
+      model: _model,
+      confidence: widget.settings.confidence,
+    );
     final next = (_liveModels.indexOf(_model) + 1) % _liveModels.length;
     setState(() {
       _model = _liveModels[next];
       _boxes = const [];
+      _uniqueBirdCount = 0;
       _lastTime = null;
+      _sessionId = _newSessionId();
     });
   }
 
@@ -175,7 +201,7 @@ class _LivePageState extends State<LivePage> with WidgetsBindingObserver {
     final status = _lastTime == null
         ? 'Détection en cours…'
         : '${count == 0 ? 'Aucun oiseau' : '$count oiseau${count > 1 ? 'x' : ''}'}'
-              ' · ${(_lastTime!.inMilliseconds / 1000).toStringAsFixed(1)} s par image';
+              ' · ${(_lastTime!.inMilliseconds / 1000).toStringAsFixed(1)} s/image';
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -211,6 +237,20 @@ class _LivePageState extends State<LivePage> with WidgetsBindingObserver {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
+                  if (_lastTime != null && _uniqueBirdCount > 0) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.flutter_dash, color: Colors.amber, size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$_uniqueBirdCount oiseau${_uniqueBirdCount > 1 ? 'x' : ''} unique${_uniqueBirdCount > 1 ? 's' : ''} détecté${_uniqueBirdCount > 1 ? 's' : ''}',
+                          style: const TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ],
                   if (camera != null && _error != null) ...[
                     const SizedBox(height: 10),
                     ErrorBanner(_error!),

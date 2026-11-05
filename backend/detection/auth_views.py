@@ -1,6 +1,5 @@
 
 import json
-import secrets
 
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -8,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+from rest_framework.authtoken.models import Token
 
 
 User = get_user_model()
@@ -54,9 +54,12 @@ def register(request):
         password=password,
     )
 
+    token, _ = Token.objects.get_or_create(user=user)
+
     return JsonResponse(
         {
             "message": "Inscription réussie.",
+            "token": token.key,
             "user": {
                 "id": user.pk,
                 "username": user.username,
@@ -109,14 +112,12 @@ def login(request):
             status=401,
         )
 
-    # Jeton temporaire compatible avec le format attendu par Login.jsx.
-    # Pour une authentification sécurisée, remplacer par un vrai système de tokens.
-    token = secrets.token_urlsafe(32)
+    token, _ = Token.objects.get_or_create(user=user)
 
     return JsonResponse(
         {
             "message": "Connexion réussie.",
-            "token": token,
+            "token": token.key,
             "user": {
                 "id": user.pk,
                 "username": user.username,
