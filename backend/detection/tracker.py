@@ -1,11 +1,13 @@
 """
-BirdTracker — IoU-based multi-object tracker with track buffer.
+BirdTracker — IoU + velocity re-identification tracker.
 
-Uses the Hungarian algorithm (scipy) for optimal frame-to-frame assignment.
-Keeps lost tracks alive for `max_lost` frames so a bird that briefly
-leaves the frame gets its ID back when it reappears nearby.
+Two-stage matching:
+  Stage 1 — IoU ≥ iou_threshold  against active tracks (last seen this frame).
+  Stage 2 — Centre distance ≤ max_distance against LOST tracks, using
+             velocity-extrapolated predicted positions.
 
-No external tracker library needed — only numpy + scipy (already installed).
+A bird that exits and re-enters within max_lost frames at a nearby position
+gets its old tracker ID back instead of a new one.
 """
 
 import numpy as np
@@ -13,38 +15,57 @@ from scipy.optimize import linear_sum_assignment
 
 
 def _iou(a, b):
-    """IoU between two boxes [x1, y1, x2, y2]."""
-    x1 = max(a[0], b[0])
-    y1 = max(a[1], b[1])
-    x2 = min(a[2], b[2])
-    y2 = min(a[3], b[3])
+    x1, y1 = max(a[0], b[0]), max(a[1], b[1])
+    x2, y2 = min(a[2], b[2]), min(a[3], b[3])
     inter = max(0.0, x2 - x1) * max(0.0, y2 - y1)
     if inter == 0:
         return 0.0
-    area_a = (a[2] - a[0]) * (a[3] - a[1])
-    area_b = (b[2] - b[0]) * (b[3] - b[1])
-    union = area_a + area_b - inter
+    union = (a[2]-a[0])*(a[3]-a[1]) + (b[2]-b[0])*(b[3]-b[1]) - inter
     return inter / union if union > 0 else 0.0
+
+
+def _center(bbox):
+    return ((bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2)
+
+
+def _distance(a, b):
+    ax, ay = _center(a)
+    bx, by = _center(b)
+    return ((ax - bx) ** 2 + (ay - by) ** 2) ** 0.5
+
+
+def _predict(track):
+    """Extrapolate last bbox by stored velocity × frames lost."""
+    x1, y1, x2, y2 = track["bbox"]
+    vx, vy = track.get("vx", 0.0), track.get("vy", 0.0)
+    n = track["lost"]
+    return [x1 + vx * n, y1 + vy * n, x2 + vx * n, y2 + vy * n]
 
 
 class BirdTracker:
     """
-    Multi-bird IoU tracker with configurable re-identification buffer.
-
     Parameters
     ----------
     iou_threshold : float
-        Minimum IoU to match a detection to an existing track.
+        Min IoU to match a detection to an active track (stage 1).
     max_lost : int
-        Frames a track is kept alive after its last detection.
-        90 frames ≈ 3 s at 30 fps — good for birds that briefly leave frame.
+        Frames a track survives without a match before being deleted.
+        90 ≈ 3 s at 30 fps.
+    max_distance : float
+        Max centre-to-centre pixel distance to re-match a lost track (stage 2).
+        150 px works well for 640×640 images.
     """
 
-    def __init__(self, iou_threshold: float = 0.25, max_lost: int = 90):
+    def __init__(
+        self,
+        iou_threshold: float = 0.25,
+        max_lost: int = 90,
+        max_distance: float = 150.0,
+    ):
         self.iou_threshold = iou_threshold
         self.max_lost = max_lost
+        self.max_distance = max_distance
         self._next_id: int = 1
-        # track_id → {"bbox": [x1,y1,x2,y2], "conf": float, "lost": int, "age": int}
         self._tracks: dict = {}
 
     def reset(self):
@@ -52,6 +73,22 @@ class BirdTracker:
         self._tracks.clear()
 
     # ------------------------------------------------------------------
+
+    def _apply_match(self, tid: int, det):
+        """Update a track with a matched detection; refresh velocity."""
+        t = self._tracks[tid]
+        old = t["bbox"]
+        new = list(det[:4])
+        # Exponential moving average of velocity (α=0.5 smooths jitter)
+        alpha = 0.5
+        ocx, ocy = _center(old)
+        ncx, ncy = _center(new)
+        t["vx"] = alpha * (ncx - ocx) + (1 - alpha) * t.get("vx", 0.0)
+        t["vy"] = alpha * (ncy - ocy) + (1 - alpha) * t.get("vy", 0.0)
+        t["bbox"] = new
+        t["conf"] = float(det[4])
+        t["lost"] = 0
+        t["age"] += 1
 
     def update(self, detections: list) -> list:
         """
@@ -61,9 +98,9 @@ class BirdTracker:
 
         Returns
         -------
-        list of (x1, y1, x2, y2, conf, track_id)
+        list of (x1, y1, x2, y2, conf, track_id)  — active tracks only
         """
-        # Advance lost counters; prune dead tracks.
+        # Prune tracks that have been lost too long
         dead = [tid for tid, t in self._tracks.items()
                 if t["lost"] > self.max_lost]
         for tid in dead:
@@ -75,38 +112,56 @@ class BirdTracker:
             return []
 
         track_ids = list(self._tracks.keys())
-        track_bboxes = [self._tracks[tid]["bbox"] for tid in track_ids]
+        matched_det: set = set()
+        matched_trk: set = set()   # indices into track_ids
 
-        matched_det = set()   # detection indices matched to existing tracks
-        matched_trk = set()   # track indices matched
+        # ── Stage 1 : IoU matching against ACTIVE tracks ─────────────
+        active_ti = [i for i, tid in enumerate(track_ids)
+                     if self._tracks[tid]["lost"] == 0]
+        if active_ti:
+            n_d = len(detections)
+            iou_mat = np.zeros((n_d, len(active_ti)))
+            for di, det in enumerate(detections):
+                for col, ti in enumerate(active_ti):
+                    iou_mat[di, col] = _iou(det[:4], self._tracks[track_ids[ti]]["bbox"])
 
-        if track_bboxes:
-            # IoU matrix  (n_det × n_tracks)
-            n_d, n_t = len(detections), len(track_bboxes)
-            iou_mat = np.zeros((n_d, n_t))
-            for i, det in enumerate(detections):
-                for j, tb in enumerate(track_bboxes):
-                    iou_mat[i, j] = _iou(det[:4], tb)
-
-            # Hungarian assignment
-            det_idx, trk_idx = linear_sum_assignment(-iou_mat)
-
-            for di, ti in zip(det_idx, trk_idx):
-                if iou_mat[di, ti] >= self.iou_threshold:
-                    tid = track_ids[ti]
-                    self._tracks[tid]["bbox"] = list(detections[di][:4])
-                    self._tracks[tid]["conf"] = float(detections[di][4])
-                    self._tracks[tid]["lost"] = 0
-                    self._tracks[tid]["age"] += 1
+            rows, cols = linear_sum_assignment(-iou_mat)
+            for di, col in zip(rows, cols):
+                if iou_mat[di, col] >= self.iou_threshold:
+                    ti = active_ti[col]
+                    self._apply_match(track_ids[ti], detections[di])
                     matched_det.add(di)
                     matched_trk.add(ti)
 
-        # Increment lost for unmatched tracks.
+        # ── Stage 2 : Distance matching against LOST tracks ──────────
+        lost_ti = [i for i, tid in enumerate(track_ids)
+                   if self._tracks[tid]["lost"] > 0 and i not in matched_trk]
+        unmatched_di = [di for di in range(len(detections))
+                        if di not in matched_det]
+
+        if lost_ti and unmatched_di:
+            dist_mat = np.zeros((len(unmatched_di), len(lost_ti)))
+            predicted = {i: _predict(self._tracks[track_ids[i]]) for i in lost_ti}
+
+            for row, di in enumerate(unmatched_di):
+                for col, ti in enumerate(lost_ti):
+                    dist_mat[row, col] = _distance(detections[di][:4], predicted[ti])
+
+            rows2, cols2 = linear_sum_assignment(dist_mat)
+            for row, col in zip(rows2, cols2):
+                if dist_mat[row, col] <= self.max_distance:
+                    di = unmatched_di[row]
+                    ti = lost_ti[col]
+                    self._apply_match(track_ids[ti], detections[di])
+                    matched_det.add(di)
+                    matched_trk.add(ti)
+
+        # ── Increment lost counter for unmatched tracks ───────────────
         for ti, tid in enumerate(track_ids):
             if ti not in matched_trk:
                 self._tracks[tid]["lost"] += 1
 
-        # Create new tracks for unmatched detections.
+        # ── Create new tracks for unmatched detections ────────────────
         for di, det in enumerate(detections):
             if di not in matched_det:
                 self._tracks[self._next_id] = {
@@ -114,10 +169,12 @@ class BirdTracker:
                     "conf": float(det[4]),
                     "lost": 0,
                     "age": 1,
+                    "vx": 0.0,
+                    "vy": 0.0,
                 }
                 self._next_id += 1
 
-        # Build output: only active tracks (lost == 0), in track-id order.
+        # ── Output: only currently visible tracks ─────────────────────
         output = []
         for tid in sorted(self._tracks.keys()):
             t = self._tracks[tid]
@@ -129,5 +186,4 @@ class BirdTracker:
 
     @property
     def unique_ids_seen(self) -> int:
-        """Total unique bird IDs ever assigned since last reset()."""
         return self._next_id - 1
