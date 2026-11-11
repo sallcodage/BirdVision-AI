@@ -54,3 +54,15 @@ Desktop.ini
 .idea/
 runs/
 
+# =========================
+# Environnement virtuel Python
+# =========================
+myenv/
+
+# =========================
+# Flutter / Dart
+# =========================
+birdvision_app/.dart_tool/
+rfdetr_app/android/build/
+**/.dart_tool/chrome-device/
+
