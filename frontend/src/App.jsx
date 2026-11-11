@@ -88,6 +88,35 @@ const [authToken, setAuthToken] = useState(null);
 
   const [activeTab, setActiveTab] = useState("image");
 
+  /* ======================================================
+     HISTORIQUE
+     ====================================================== */
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+
+  const fetchHistory = async () => {
+    setHistoryLoading(true);
+    setHistoryError("");
+    try {
+      const r = await fetch(`${import.meta.env.VITE_API_URL}/api/history/`, {
+        headers: authToken ? { Authorization: `Token ${authToken}` } : {},
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Erreur serveur");
+      setHistory(data.history || []);
+    } catch (err) {
+      setHistoryError(err.message || "Impossible de charger l'historique.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated && activeTab === "historique") fetchHistory();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, isAuthenticated]);
+
 
 
   /* ======================================================
@@ -145,7 +174,9 @@ const [authToken, setAuthToken] = useState(null);
             ? "D-FINE-S"
             : selectedModel === "faster-rcnn"
               ? "Faster R-CNN"
-              : "Modèle inconnu";
+              : selectedModel === "groq-qwen"
+                ? "Groq Qwen (Cloud)"
+                : "Modèle inconnu";
 
 
 
@@ -1321,6 +1352,12 @@ if (!isAuthenticated) {
             >
               Vidéo
             </button>
+            <button
+              className={`analysis-tab${activeTab === "historique" ? " analysis-tab--active" : ""}`}
+              onClick={() => setActiveTab("historique")}
+            >
+              Historique
+            </button>
           </div>
 
 
@@ -1753,6 +1790,10 @@ if (!isAuthenticated) {
 
   <option value="faster-rcnn">
     Faster R-CNN
+  </option>
+
+  <option value="groq-qwen">
+    Groq Qwen (Cloud)
   </option>
 </select>
 
@@ -2682,6 +2723,82 @@ if (!isAuthenticated) {
           )}
 
 
+
+          {/* HISTORIQUE */}
+          {activeTab === "historique" && (
+            <div className="workspace" style={{ display: "block" }}>
+              <article className="panel" style={{ width: "100%" }}>
+                <div className="panel-header">
+                  <div className="panel-title">
+                    <span className="step-number">H</span>
+                    <div>
+                      <span className="panel-label">BASE DE DONNÉES COMMUNE</span>
+                      <h3>Historique des détections</h3>
+                    </div>
+                  </div>
+                  <button className="secondary-button" onClick={fetchHistory} disabled={historyLoading} style={{ padding: "6px 14px", fontSize: "13px" }}>
+                    {historyLoading ? "Chargement…" : "↻ Actualiser"}
+                  </button>
+                </div>
+
+                {historyError && (
+                  <div className="error-state" style={{ padding: "16px" }}>
+                    <p>{historyError}</p>
+                  </div>
+                )}
+
+                {!historyLoading && !historyError && history.length === 0 && (
+                  <div className="empty-state" style={{ padding: "32px", textAlign: "center" }}>
+                    <h4>Aucune détection enregistrée</h4>
+                    <p>Les analyses effectuées depuis le Web ou l'application mobile apparaîtront ici.</p>
+                  </div>
+                )}
+
+                {history.length > 0 && (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)", textAlign: "left" }}>
+                          <th style={{ padding: "10px 12px", color: "var(--text-secondary, #aaa)" }}>#</th>
+                          <th style={{ padding: "10px 12px", color: "var(--text-secondary, #aaa)" }}>Modèle</th>
+                          <th style={{ padding: "10px 12px", color: "var(--text-secondary, #aaa)" }}>Oiseaux</th>
+                          <th style={{ padding: "10px 12px", color: "var(--text-secondary, #aaa)" }}>Confiance</th>
+                          <th style={{ padding: "10px 12px", color: "var(--text-secondary, #aaa)" }}>Date</th>
+                          <th style={{ padding: "10px 12px", color: "var(--text-secondary, #aaa)" }}>Image</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {history.map((entry) => (
+                          <tr key={entry.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                            <td style={{ padding: "10px 12px", color: "#666" }}>{entry.id}</td>
+                            <td style={{ padding: "10px 12px" }}>
+                              <span className="model-status" style={{ fontSize: "12px" }}>{entry.model}</span>
+                            </td>
+                            <td style={{ padding: "10px 12px", fontWeight: "700", color: entry.bird_count > 0 ? "#4ade80" : "#aaa" }}>
+                              {entry.bird_count}
+                            </td>
+                            <td style={{ padding: "10px 12px" }}>
+                              {Math.round(entry.confidence_threshold * 100)} %
+                            </td>
+                            <td style={{ padding: "10px 12px", fontSize: "12px", color: "#aaa" }}>
+                              {new Date(entry.created_at).toLocaleString("fr-FR")}
+                            </td>
+                            <td style={{ padding: "10px 12px" }}>
+                              {entry.result_image ? (
+                                <a href={entry.result_image} target="_blank" rel="noreferrer">
+                                  <img src={entry.result_image} alt="résultat" style={{ width: "60px", height: "40px", objectFit: "cover", borderRadius: "4px" }} />
+                                </a>
+                              ) : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </article>
+            </div>
+          )}
 
           {/* VIDEO STATS */}
           {activeTab === "video" && videoResult && (

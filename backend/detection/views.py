@@ -10,9 +10,12 @@ import cv2
 import imageio_ffmpeg
 import numpy as np
 from PIL import Image, ImageOps
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from django.conf import settings
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
@@ -22,6 +25,7 @@ from rfdetr import RFDETRSmall
 
 from .dfine_model import DfineModel
 from .fasterrcnn_model import FasterRcnnModel
+from .groq_model import detect_from_path as groq_detect_path, detect_from_bytes as groq_detect_bytes, annotate_image as groq_annotate
 from .models import Detection, TrackedBird, TrackingSession
 from .tracker import BirdTracker
 
@@ -57,6 +61,11 @@ MODEL_CONFIG = {
     "faster-rcnn": {
         "path": None,
         "type": "fasterrcnn",
+    },
+    # Modèle cloud via Groq API (aucun poids local)
+    "groq-qwen": {
+        "path": None,
+        "type": "groq",
     },
 }
 
@@ -114,6 +123,10 @@ print("Chargement de Faster R-CNN...")
 models["faster-rcnn"] = FasterRcnnModel()
 print("Faster R-CNN chargé avec succès !")
 
+# Groq est un modèle cloud : pas de chargement local.
+models["groq-qwen"] = None
+print("Groq-Qwen configuré (API cloud).")
+
 
 # ============================================
 # SAUVEGARDE D'UNE ANALYSE EN BASE
@@ -166,7 +179,7 @@ def detect_birds(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    model = models[model_name]
+    model = models[model_name]  # None pour groq-qwen
 
     # ========================================
     # SEUIL DE CONFIANCE
@@ -246,6 +259,51 @@ def detect_birds(request):
     with open(input_path, "wb+") as destination:
         for chunk in image.chunks():
             destination.write(chunk)
+
+    # ========================================
+    # GROQ-QWEN : DÉTECTION VIA API CLOUD
+    # ========================================
+
+    if MODEL_CONFIG[model_name]["type"] == "groq":
+        try:
+            detections_raw, _, _ = groq_detect_path(str(input_path), confidence)
+            output_path = result_directory / filename
+            groq_annotate(str(input_path), detections_raw, str(output_path))
+
+            detections = []
+            for d in detections_raw:
+                box = d["box"]
+                detections.append({
+                    "class": d.get("class_name", "oiseau"),
+                    "confidence": round(d["confidence"], 4),
+                    "box": {
+                        "x1": round(box["x1"], 4),
+                        "y1": round(box["y1"], 4),
+                        "x2": round(box["x2"], 4),
+                        "y2": round(box["y2"], 4),
+                    },
+                })
+
+            result_url = request.build_absolute_uri(
+                settings.MEDIA_URL + "results/" + filename
+            )
+            _save_detection(request, model_name, confidence, len(detections), detections, filename)
+            return Response(
+                {
+                    "success": True,
+                    "model": model_name,
+                    "bird_count": len(detections),
+                    "confidence_threshold": confidence,
+                    "detections": detections,
+                    "result_image": result_url,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as error:
+            return Response(
+                {"error": "Erreur pendant la détection Groq.", "details": str(error)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     # ========================================
     # RF-DETR-S : DÉTECTION D'IMAGE
@@ -559,39 +617,26 @@ def detect_birds(request):
 # ============================================
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def detection_history(request):
     """
     GET /api/history/
-    Retourne les 50 dernières analyses de l'utilisateur authentifié.
-    Nécessite : Authorization: Token <token>
+    Retourne uniquement les analyses image (les sessions ont /api/sessions/).
     """
-    if not request.user.is_authenticated:
-        return Response(
-            {"error": "Authentification requise."},
-            status=status.HTTP_401_UNAUTHORIZED,
-        )
-
-    qs = (
-        Detection.objects
-        .filter(user=request.user)
-        .order_by("-created_at")[:50]
-    )
-
+    img_qs = Detection.objects.order_by("-created_at")[:50]
     history = []
-    for d in qs:
+    for d in img_qs:
         result_image_url = None
         if d.result_image:
             try:
                 result_image_url = request.build_absolute_uri(d.result_image.url)
             except Exception:
                 pass
-
         history.append({
             "id": d.pk,
             "model": d.model,
-            "confidence_threshold": d.confidence_threshold,
+            "confidence_threshold": float(d.confidence_threshold),
             "bird_count": d.bird_count,
-            "detections": d.detections,
             "result_image": result_image_url,
             "created_at": d.created_at.isoformat(),
         })
@@ -624,6 +669,27 @@ def _detect_frame(
     """
 
     boxes = []
+
+    # ========================================
+    # GROQ-QWEN (cloud)
+    # ========================================
+
+    if MODEL_CONFIG[model_name]["type"] == "groq":
+        encoded, buffer = cv2.imencode(".jpg", frame)
+        if not encoded:
+            raise RuntimeError("Impossible d'encoder l'image.")
+        detections_raw = groq_detect_bytes(buffer.tobytes(), confidence)
+        h, w = frame.shape[:2]
+        for d in detections_raw:
+            box = d["box"]
+            boxes.append((
+                int(box["x1"] * w),
+                int(box["y1"] * h),
+                int(box["x2"] * w),
+                int(box["y2"] * h),
+                d["confidence"],
+            ))
+        return boxes
 
     # ========================================
     # RF-DETR-S
@@ -818,7 +884,9 @@ def _normalize_boxes(boxes, width, height):
 frame_locks = {
     name: threading.Lock()
     for name in MODEL_CONFIG
+    if MODEL_CONFIG[name]["type"] != "groq"
 }
+frame_locks["groq-qwen"] = threading.Lock()
 
 
 # ============================================
@@ -841,7 +909,13 @@ def _get_live_tracker(session_id, fps=10):
             del live_sessions[sid]
 
         if session_id not in live_sessions:
-            tracker = BirdTracker(max_lost=90)
+            # 90 frames à ~10fps = 9s de tampon live + graveyard 9s supplémentaires
+            tracker = BirdTracker(
+                max_lost=90,
+                max_distance=300.0,
+                graveyard_frames=90,
+                graveyard_distance=200.0,
+            )
             live_sessions[session_id] = {
                 "tracker": tracker,
                 "last_seen": now,
@@ -1258,7 +1332,16 @@ def _run_video_job(
         all_tracker_ids = set()
         birds_stats = {}  # tracker_id -> {frame_count, total_conf, max_conf, last_box}
 
-        tracker = BirdTracker(max_lost=90)
+        # max_lost en frames analysées = 5 secondes réelles de vidéo
+        # ex: fps=30, frame_step=15 → 1 frame analysée / 0.5s → max_lost=10 (5s)
+        _effective_fps = max(1.0, fps / max(1, frame_step))
+        _max_lost_video = max(10, int(5.0 * _effective_fps))
+        tracker = BirdTracker(
+            max_lost=_max_lost_video,
+            max_distance=300.0,
+            graveyard_frames=_max_lost_video * 2,
+            graveyard_distance=200.0,
+        )
 
         with video_inference_lock:
 

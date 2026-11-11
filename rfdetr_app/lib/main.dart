@@ -76,6 +76,85 @@ class _HomePageState extends State<_HomePage> {
     if (mounted) setState(() => _online = ok);
   }
 
+  Future<String?> _showLoginDialog(BuildContext ctx, RfDetrApi api) async {
+    final emailCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+    final userCtrl = TextEditingController();
+    bool isRegister = false;
+    String? error;
+    bool loading = false;
+
+    return showDialog<String>(
+      context: ctx,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text(isRegister ? 'Créer un compte' : 'Se connecter'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isRegister) ...[
+                  TextField(
+                    controller: userCtrl,
+                    decoration: const InputDecoration(labelText: "Nom d'utilisateur"),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Email'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: passCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Mot de passe'),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => setState(() { isRegister = !isRegister; error = null; }),
+              child: Text(isRegister ? 'Déjà un compte ?' : 'Créer un compte'),
+            ),
+            if (loading)
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              FilledButton(
+                onPressed: () async {
+                  setState(() { loading = true; error = null; });
+                  try {
+                    final Map<String, dynamic> res;
+                    if (isRegister) {
+                      res = await api.register(userCtrl.text.trim(), emailCtrl.text.trim(), passCtrl.text);
+                    } else {
+                      res = await api.login(emailCtrl.text.trim(), passCtrl.text);
+                    }
+                    if (context.mounted) Navigator.pop(context, res['token'] as String);
+                  } catch (e) {
+                    setState(() {
+                      error = e.toString().replaceFirst('Exception: ', '');
+                      loading = false;
+                    });
+                  }
+                },
+                child: Text(isRegister ? "S'inscrire" : 'Connexion'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _openSettings() async {
     final urlController = TextEditingController(text: _serverUrl);
     final tokenController = TextEditingController(text: _token);
@@ -167,14 +246,35 @@ class _HomePageState extends State<_HomePage> {
               ),
               _Hint('Plus le nombre est grand, plus l\'analyse est rapide'),
               const SizedBox(height: 16),
-              TextField(
-                controller: tokenController,
-                decoration: InputDecoration(
-                  labelText: 'Token d\'authentification',
-                  hintText: 'Votre token Django REST',
-                  prefixIcon: const Icon(Icons.vpn_key_outlined),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: tokenController,
+                      decoration: InputDecoration(
+                        labelText: 'Token d\'authentification',
+                        hintText: tokenController.text.isEmpty ? 'Connectez-vous →' : null,
+                        prefixIcon: const Icon(Icons.vpn_key_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton.tonalIcon(
+                    icon: const Icon(Icons.login),
+                    label: const Text('Connexion'),
+                    onPressed: () async {
+                      final token = await _showLoginDialog(
+                        context,
+                        RfDetrApi(urlController.text.trim()),
+                      );
+                      if (token != null) {
+                        tokenController.text = token;
+                        setSheet(() {});
+                      }
+                    },
+                  ),
+                ],
               ),
               const SizedBox(height: 24),
               SizedBox(

@@ -53,20 +53,13 @@ class _VideoPageState extends State<VideoPage> {
   }
 
   void _gate() {
-    final player = _player;
-    if (player == null || !player.value.isInitialized || !_loading) return;
-    final t = player.value.position.inMilliseconds / 1000;
-    if (player.value.isPlaying && t >= _analyzedUntil) {
-      player.pause();
-      setState(() => _waiting = true);
-    }
+    // Vidéo joue librement — pas de blocage
   }
 
   void _resumeIfReady() {
     final player = _player;
-    if (!_waiting || player == null || !player.value.isInitialized) return;
-    final t = player.value.position.inMilliseconds / 1000;
-    if (_analyzedUntil > t + 0.3) {
+    if (player == null || !player.value.isInitialized) return;
+    if (!player.value.isPlaying) {
       _waiting = false;
       player.play();
     }
@@ -89,7 +82,7 @@ class _VideoPageState extends State<VideoPage> {
       await player.setLooping(true);
       await player.setVolume(0);
       player.addListener(_gate);
-      if (mounted) setState(() => _waiting = true);
+      if (mounted) setState(() => _waiting = false);
     } catch (_) {
       if (mounted && _player == player) setState(() => _player = null);
     }
@@ -150,10 +143,9 @@ class _VideoPageState extends State<VideoPage> {
 
     final player = _player;
     if (player != null && player.value.isInitialized) {
-      await player.pause();
       await player.seekTo(Duration.zero);
     }
-    _waiting = true;
+    _waiting = false;
 
     setState(() {
       _loading = true;
@@ -163,6 +155,11 @@ class _VideoPageState extends State<VideoPage> {
       _progress = 0;
       _detections = const [];
     });
+
+    // Vidéo démarre immédiatement, détection tourne en parallèle
+    if (player != null && player.value.isInitialized) {
+      player.play();
+    }
 
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _elapsed++);

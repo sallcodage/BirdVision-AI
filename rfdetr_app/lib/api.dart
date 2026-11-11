@@ -126,10 +126,35 @@ class RfDetrApi {
     } catch (_) {}
   }
 
+  Future<Map<String, dynamic>> login(String email, String password) async {
+    final r = await http.post(
+      _uri('/api/auth/login/'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'password': password}),
+    ).timeout(const Duration(seconds: 15));
+    final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+    if (r.statusCode != 200) throw Exception(body['error'] ?? 'Erreur connexion.');
+    return body;
+  }
+
+  Future<Map<String, dynamic>> register(String username, String email, String password) async {
+    final r = await http.post(
+      _uri('/api/auth/register/'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'username': username, 'email': email, 'password': password}),
+    ).timeout(const Duration(seconds: 15));
+    final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+    if (r.statusCode != 201) throw Exception(body['error'] ?? 'Erreur inscription.');
+    return body;
+  }
+
   Future<List<HistoryEntry>> fetchHistory(String token) async {
+    final headers = <String, String>{};
+    if (token.isNotEmpty) headers['Authorization'] = 'Token $token';
+
     final r = await http.get(
       _uri('/api/history/'),
-      headers: {'Authorization': 'Token $token'},
+      headers: headers,
     ).timeout(const Duration(seconds: 15));
 
     if (r.statusCode == 401) throw Exception('Token invalide. Vérifiez vos réglages.');

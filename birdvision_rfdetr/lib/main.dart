@@ -7,7 +7,10 @@ import 'history_page.dart';
 import 'image_page.dart';
 import 'video_page.dart';
 
-void main() => runApp(const BirdVisionRfDetrApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const BirdVisionRfDetrApp());
+}
 
 ThemeData _theme(Brightness brightness) {
   const seed = BrandColors.blue;
@@ -283,19 +286,20 @@ class _HomePageState extends State<_HomePage> {
             ),
           ),
           Expanded(
-            child: IndexedStack(
-              index: _tab,
-              children: [
-                CameraPage(api: _api, confidence: _confidence),
-                ImagePage(api: _api, confidence: _confidence),
-                VideoPage(
-                  api: _api,
-                  confidence: _confidence,
-                  frameStep: _frameStep,
-                ),
-                HistoryPage(api: _api, token: _token),
-              ],
-            ),
+            child: _tab == 0
+                ? CameraPage(api: _api, confidence: _confidence)
+                : IndexedStack(
+                    index: _tab - 1,
+                    children: [
+                      ImagePage(api: _api, confidence: _confidence),
+                      VideoPage(
+                        api: _api,
+                        confidence: _confidence,
+                        frameStep: _frameStep,
+                      ),
+                      HistoryPage(api: _api, token: _token),
+                    ],
+                  ),
           ),
         ],
       ),

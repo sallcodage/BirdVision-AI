@@ -1,13 +1,13 @@
 """
 BirdTracker — IoU + velocity re-identification tracker.
 
-Two-stage matching:
-  Stage 1 — IoU ≥ iou_threshold  against active tracks (last seen this frame).
-  Stage 2 — Centre distance ≤ max_distance against LOST tracks, using
-             velocity-extrapolated predicted positions.
-
-A bird that exits and re-enters within max_lost frames at a nearby position
-gets its old tracker ID back instead of a new one.
+Three-stage matching:
+  Stage 1 — IoU ≥ iou_threshold  against ACTIVE tracks (lost == 0).
+  Stage 2 — Centre distance ≤ max_distance against LOST tracks,
+             using velocity-extrapolated predicted positions.
+  Stage 3 — Graveyard re-ID: dead tracks kept for graveyard_frames more
+             frames with a strict distance check. Lets a bird that briefly
+             exits and re-enters get back its original ID.
 """
 
 import numpy as np
@@ -49,28 +49,38 @@ class BirdTracker:
     iou_threshold : float
         Min IoU to match a detection to an active track (stage 1).
     max_lost : int
-        Frames a track survives without a match before being deleted.
-        90 ≈ 3 s at 30 fps.
+        Frames a track survives in the active pool without a match.
     max_distance : float
-        Max centre-to-centre pixel distance to re-match a lost track (stage 2).
-        150 px works well for 640×640 images.
+        Max centre-to-centre pixel distance for lost-track re-match (stage 2).
+    graveyard_frames : int
+        Extra frames a dead track stays in the graveyard for stage-3 re-ID.
+        Set to 0 to disable. Default: same as max_lost.
+    graveyard_distance : float
+        Stricter distance threshold used in the graveyard stage (stage 3).
     """
 
     def __init__(
         self,
         iou_threshold: float = 0.25,
         max_lost: int = 90,
-        max_distance: float = 150.0,
+        max_distance: float = 300.0,
+        graveyard_frames: int = None,
+        graveyard_distance: float = 200.0,
     ):
         self.iou_threshold = iou_threshold
         self.max_lost = max_lost
         self.max_distance = max_distance
+        self.graveyard_frames = graveyard_frames if graveyard_frames is not None else max_lost
+        self.graveyard_distance = graveyard_distance
         self._next_id: int = 1
         self._tracks: dict = {}
+        # graveyard: tid → {"bbox", "vx", "vy", "ttl"}  (ttl counts down)
+        self._graveyard: dict = {}
 
     def reset(self):
         self._next_id = 1
         self._tracks.clear()
+        self._graveyard.clear()
 
     # ------------------------------------------------------------------
 
@@ -79,7 +89,6 @@ class BirdTracker:
         t = self._tracks[tid]
         old = t["bbox"]
         new = list(det[:4])
-        # Exponential moving average of velocity (α=0.5 smooths jitter)
         alpha = 0.5
         ocx, ocy = _center(old)
         ncx, ncy = _center(new)
@@ -90,6 +99,21 @@ class BirdTracker:
         t["lost"] = 0
         t["age"] += 1
 
+    def _revive(self, tid: int, det):
+        """Bring a graveyard track back to life with a new detection."""
+        g = self._graveyard.pop(tid)
+        new = list(det[:4])
+        ocx, ocy = _center(g["bbox"])
+        ncx, ncy = _center(new)
+        self._tracks[tid] = {
+            "bbox": new,
+            "conf": float(det[4]),
+            "lost": 0,
+            "age": g.get("age", 1) + 1,
+            "vx": (ncx - ocx) * 0.5,
+            "vy": (ncy - ocy) * 0.5,
+        }
+
     def update(self, detections: list) -> list:
         """
         Parameters
@@ -98,13 +122,29 @@ class BirdTracker:
 
         Returns
         -------
-        list of (x1, y1, x2, y2, conf, track_id)  — active tracks only
+        list of (x1, y1, x2, y2, conf, track_id) — active tracks only
         """
-        # Prune tracks that have been lost too long
-        dead = [tid for tid, t in self._tracks.items()
-                if t["lost"] > self.max_lost]
-        for tid in dead:
-            del self._tracks[tid]
+        # ── Move expired tracks to graveyard ─────────────────────────
+        expired = [tid for tid, t in self._tracks.items()
+                   if t["lost"] > self.max_lost]
+        for tid in expired:
+            t = self._tracks.pop(tid)
+            if self.graveyard_frames > 0:
+                self._graveyard[tid] = {
+                    "bbox": t["bbox"],
+                    "vx": t.get("vx", 0.0),
+                    "vy": t.get("vy", 0.0),
+                    "age": t.get("age", 1),
+                    "ttl": self.graveyard_frames,
+                }
+
+        # ── Age graveyard entries ─────────────────────────────────────
+        dead_graves = [tid for tid, g in self._graveyard.items()
+                       if g["ttl"] <= 0]
+        for tid in dead_graves:
+            del self._graveyard[tid]
+        for g in self._graveyard.values():
+            g["ttl"] -= 1
 
         if not detections:
             for t in self._tracks.values():
@@ -113,7 +153,7 @@ class BirdTracker:
 
         track_ids = list(self._tracks.keys())
         matched_det: set = set()
-        matched_trk: set = set()   # indices into track_ids
+        matched_trk: set = set()
 
         # ── Stage 1 : IoU matching against ACTIVE tracks ─────────────
         active_ti = [i for i, tid in enumerate(track_ids)
@@ -136,8 +176,7 @@ class BirdTracker:
         # ── Stage 2 : Distance matching against LOST tracks ──────────
         lost_ti = [i for i, tid in enumerate(track_ids)
                    if self._tracks[tid]["lost"] > 0 and i not in matched_trk]
-        unmatched_di = [di for di in range(len(detections))
-                        if di not in matched_det]
+        unmatched_di = [di for di in range(len(detections)) if di not in matched_det]
 
         if lost_ti and unmatched_di:
             dist_mat = np.zeros((len(unmatched_di), len(lost_ti)))
@@ -155,6 +194,32 @@ class BirdTracker:
                     self._apply_match(track_ids[ti], detections[di])
                     matched_det.add(di)
                     matched_trk.add(ti)
+
+        # ── Stage 3 : Graveyard re-ID ─────────────────────────────────
+        unmatched_di2 = [di for di in range(len(detections)) if di not in matched_det]
+        grave_ids = list(self._graveyard.keys())
+
+        if grave_ids and unmatched_di2:
+            dist_mat2 = np.zeros((len(unmatched_di2), len(grave_ids)))
+            for row, di in enumerate(unmatched_di2):
+                for col, tid in enumerate(grave_ids):
+                    g = self._graveyard[tid]
+                    n = self.graveyard_frames - g["ttl"]
+                    pred = [
+                        g["bbox"][0] + g["vx"] * n,
+                        g["bbox"][1] + g["vy"] * n,
+                        g["bbox"][2] + g["vx"] * n,
+                        g["bbox"][3] + g["vy"] * n,
+                    ]
+                    dist_mat2[row, col] = _distance(detections[di][:4], pred)
+
+            rows3, cols3 = linear_sum_assignment(dist_mat2)
+            for row, col in zip(rows3, cols3):
+                if dist_mat2[row, col] <= self.graveyard_distance:
+                    di = unmatched_di2[row]
+                    tid = grave_ids[col]
+                    self._revive(tid, detections[di])
+                    matched_det.add(di)
 
         # ── Increment lost counter for unmatched tracks ───────────────
         for ti, tid in enumerate(track_ids):

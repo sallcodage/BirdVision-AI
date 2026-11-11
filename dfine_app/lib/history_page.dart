@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'api.dart';
@@ -25,11 +27,18 @@ class _HistoryPageState extends State<HistoryPage>
   bool _loadingSessions = false;
   String? _errorSessions;
 
+  Timer? _refreshTimer;
+
   @override
   void initState() {
     super.initState();
     _loadEntries();
     _loadSessions();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+      if (_tab.index == 0) _silentRefreshEntries();
+      else _silentRefreshSessions();
+    });
     _tab.addListener(() {
       if (!_tab.indexIsChanging) return;
       if (_tab.index == 0 && _entries == null && !_loadingEntries) {
@@ -42,8 +51,26 @@ class _HistoryPageState extends State<HistoryPage>
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _tab.dispose();
     super.dispose();
+  }
+
+  Future<void> _silentRefreshEntries() async {
+    if (_loadingEntries) return;
+    try {
+      final token = widget.settings.token.trim();
+      final entries = await widget.settings.api.fetchHistory(token);
+      if (mounted) setState(() => _entries = entries);
+    } catch (_) {}
+  }
+
+  Future<void> _silentRefreshSessions() async {
+    if (_loadingSessions) return;
+    try {
+      final sessions = await widget.settings.api.fetchSessions();
+      if (mounted) setState(() => _sessions = sessions);
+    } catch (_) {}
   }
 
   Future<void> _loadEntries() async {
@@ -55,16 +82,6 @@ class _HistoryPageState extends State<HistoryPage>
 
     try {
       final token = widget.settings.token.trim();
-      if (token.isEmpty) {
-        setState(() {
-          _entries = null;
-          _errorEntries =
-              'Aucun token configuré.\nAjoutez votre token dans les Réglages.';
-          _loadingEntries = false;
-        });
-        return;
-      }
-
       final entries = await widget.settings.api.fetchHistory(token);
       if (mounted) {
         setState(() {

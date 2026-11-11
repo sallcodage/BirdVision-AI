@@ -77,12 +77,14 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
   Future<void> _initCamera() async {
     try {
       _cameras = await availableCameras();
+      if (!mounted) return;
       if (_cameras.isEmpty) {
         setState(() => _initError = 'Aucune caméra disponible sur cet appareil.');
         return;
       }
       await _startCamera(_cameras.first);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _initError = 'Impossible d\'accéder à la caméra : $e');
     }
   }
@@ -96,12 +98,17 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
     );
     try {
       await ctrl.initialize();
-      if (!mounted) return;
+      if (!mounted) {
+        ctrl.dispose();
+        return;
+      }
       setState(() {
         _controller = ctrl;
         _initError = null;
       });
     } catch (e) {
+      ctrl.dispose();
+      if (!mounted) return;
       setState(() => _initError = 'Erreur caméra : $e');
     }
   }
@@ -109,13 +116,13 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
   Future<void> _switchCamera() async {
     if (_cameras.length < 2) return;
     _stopDetection();
-    final ctrl = _controller;
+    final old = _controller;
+    final oldDesc = old?.description;
     setState(() => _controller = null);
-    await ctrl?.dispose();
-    final current = _cameras.indexOf(
-      _cameras.firstWhere((c) => c == _controller?.description,
-          orElse: () => _cameras.first),
-    );
+    await old?.dispose();
+    final current = oldDesc == null
+        ? 0
+        : _cameras.indexWhere((c) => c == oldDesc);
     final next = _cameras[(current + 1) % _cameras.length];
     await _startCamera(next);
   }

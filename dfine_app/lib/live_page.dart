@@ -261,6 +261,12 @@ class _LivePageState extends State<LivePage> with WidgetsBindingObserver {
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.white60, fontSize: 12),
                   ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'ID session : $_sessionId',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white38, fontSize: 10, fontFamily: 'monospace'),
+                  ),
                 ],
               ),
             ),

@@ -97,9 +97,12 @@ class RfDetrApi {
   }
 
   Future<List<HistoryEntry>> fetchHistory(String token) async {
+    final headers = <String, String>{};
+    if (token.isNotEmpty) headers['Authorization'] = 'Token $token';
+
     final r = await http.get(
       _uri('/api/history/'),
-      headers: {'Authorization': 'Token $token'},
+      headers: headers,
     ).timeout(const Duration(seconds: 15));
 
     if (r.statusCode == 401) throw Exception('Token invalide. Vérifiez vos réglages.');

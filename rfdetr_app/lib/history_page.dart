@@ -34,16 +34,7 @@ class _HistoryPageState extends State<HistoryPage> {
     setState(() { _loading = true; _error = null; });
 
     try {
-      final token = widget.token.trim();
-      if (token.isEmpty) {
-        setState(() {
-          _entries = null;
-          _error = 'Aucun token configuré.\nAjoutez votre token dans les Réglages.';
-          _loading = false;
-        });
-        return;
-      }
-      final entries = await widget.api.fetchHistory(token);
+      final entries = await widget.api.fetchHistory(widget.token.trim());
       if (mounted) setState(() { _entries = entries; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString().replaceFirst('Exception: ', ''); _loading = false; });

@@ -116,10 +116,10 @@ class HistoryEntry {
   });
 
   factory HistoryEntry.fromJson(Map<String, dynamic> j) => HistoryEntry(
-        id: j['id'] as int,
+        id: (j['id'] as num).toInt(),
         model: j['model'] as String,
         confidenceThreshold: (j['confidence_threshold'] as num).toDouble(),
-        birdCount: j['bird_count'] as int,
+        birdCount: (j['bird_count'] as num).toInt(),
         resultImage: j['result_image'] as String?,
         createdAt: DateTime.parse(j['created_at'] as String).toLocal(),
       );
@@ -148,11 +148,13 @@ class BirdVisionApi {
   static const rfdetrModel = 'rfdetr-s';
   static const dfineXModel = 'dfine-x';
   static const fasterRcnnModel = 'faster-rcnn';
+  static const groqQwenModel = 'groq-qwen';
 
   static const models = <(String, String)>[
     (rfdetrModel, 'RF-DETR-S'),
     (dfineXModel, 'D-FINE-X'),
     (fasterRcnnModel, 'Faster R-CNN'),
+    (groqQwenModel, 'Groq Qwen (Cloud)'),
   ];
 
   Uri _uri(String path) =>
@@ -277,11 +279,36 @@ class BirdVisionApi {
     throw Exception('L\'analyse prend trop de temps (plus de 30 min).');
   }
 
+  /// POST /api/auth/login/ — retourne le token.
+  Future<Map<String, dynamic>> login(String email, String password) async {
+    final r = await http.post(
+      _uri('/api/auth/login/'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'password': password}),
+    ).timeout(const Duration(seconds: 15));
+    final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+    if (r.statusCode != 200) throw Exception(body['error'] ?? 'Erreur connexion.');
+    return body;
+  }
+
+  /// POST /api/auth/register/ — crée un compte et retourne le token.
+  Future<Map<String, dynamic>> register(String username, String email, String password) async {
+    final r = await http.post(
+      _uri('/api/auth/register/'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'username': username, 'email': email, 'password': password}),
+    ).timeout(const Duration(seconds: 15));
+    final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+    if (r.statusCode != 201) throw Exception(body['error'] ?? 'Erreur inscription.');
+    return body;
+  }
+
   /// GET /api/history/ — 50 dernières analyses image.
   Future<List<HistoryEntry>> fetchHistory(String token) async {
+    final headers = token.isNotEmpty ? {'Authorization': 'Token $token'} : <String, String>{};
     final r = await http.get(
       _uri('/api/history/'),
-      headers: {'Authorization': 'Token $token'},
+      headers: headers,
     ).timeout(const Duration(seconds: 15));
 
     if (r.statusCode == 401) throw Exception('Token invalide.');
