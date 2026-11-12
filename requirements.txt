@@ -44,3 +44,4 @@ ultralytics==8.4.158
 ultralytics-platform==0.1.54
 ultralytics-thop==2.1.6
 urllib3==2.8.0
+open-clip-torch==4.2.1
