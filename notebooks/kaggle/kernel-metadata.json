@@ -1,0 +1,13 @@
+{
+  "id": "issadiome/birdvision-yolo26s-birds",
+  "title": "BirdVision YOLO26s Birds",
+  "code_file": "train_yolo26s_birds.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": []
+}

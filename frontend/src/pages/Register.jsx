@@ -15,30 +15,22 @@ function Register({ onGoToLogin }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // ==========================================
-  // INSCRIPTION AVEC DJANGO
-  // ==========================================
-
   const handleSubmit = async (event) => {
     event.preventDefault();
 
     setError("");
     setSuccess("");
 
-    if (
-      !name.trim() ||
-      !email.trim() ||
-      !password ||
-      !confirmPassword
-    ) {
+    const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanName || !cleanEmail || !password || !confirmPassword) {
       setError("Veuillez remplir tous les champs.");
       return;
     }
 
     if (password.length < 8) {
-      setError(
-        "Le mot de passe doit contenir au moins 8 caractères."
-      );
+      setError("Le mot de passe doit contenir au moins 8 caractères.");
       return;
     }
 
@@ -50,45 +42,56 @@ function Register({ onGoToLogin }) {
     setLoading(true);
 
     try {
+      const apiUrl = import.meta.env.VITE_API_URL;
+
+      if (!apiUrl) {
+        throw new Error(
+          "L'adresse de l'API Django n'est pas configurée."
+        );
+      }
+
       const response = await fetch(
-        "http://127.0.0.1:8000/api/auth/register/",
+        `${apiUrl.replace(/\/$/, "")}/api/auth/register/`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Accept: "application/json",
           },
           body: JSON.stringify({
-            name: name.trim(),
-            email: email.trim().toLowerCase(),
+            name: cleanName,
+            email: cleanEmail,
             password,
             confirm_password: confirmPassword,
           }),
         }
       );
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        const message =
-          data.error ||
-          data.detail ||
-          Object.values(data).flat().join(" ") ||
-          "Inscription impossible.";
+        const errorDetails = data.error
+          ? String(data.error)
+          : Object.values(data)
+              .flat()
+              .join(" ") || "Inscription impossible.";
 
-        throw new Error(message);
+        throw new Error(errorDetails);
       }
 
       setSuccess(
-        "Votre compte a été créé avec succès ! Vous pouvez maintenant vous connecter."
+        data.message ||
+          "Votre compte a été créé avec succès ! Vous pouvez maintenant vous connecter."
       );
 
       setPassword("");
       setConfirmPassword("");
-
     } catch (err) {
       setError(
-        err.message ||
-        "Impossible de contacter le serveur Django."
+        err instanceof TypeError
+          ? "Impossible de contacter Django. Vérifiez que le serveur fonctionne."
+          : err.message ||
+              "Une erreur est survenue pendant l'inscription."
       );
     } finally {
       setLoading(false);
@@ -98,43 +101,24 @@ function Register({ onGoToLogin }) {
   return (
     <main
       className="register-page"
-      style={{
-        backgroundImage: `url(${loginBackground})`,
-      }}
+      style={{ backgroundImage: `url(${loginBackground})` }}
     >
-      {/* FOND SOMBRE */}
       <div className="register-overlay"></div>
 
-      {/* CONTENEUR PRINCIPAL */}
       <div className="register-container">
-
-        {/* ======================================
-            PARTIE GAUCHE
-        ======================================= */}
-
         <section className="register-showcase">
-
-          {/* LOGO ET MARQUE */}
           <div className="register-brand">
-
-            <img
-              src={birdVisionLogo}
-              alt="Logo BirdVision IA"
-            />
+            <img src={birdVisionLogo} alt="Logo BirdVision IA" />
 
             <div>
               <h1>
                 BirdVision <span>IA</span>
               </h1>
-
               <p>COMPUTER VISION PLATFORM</p>
             </div>
-
           </div>
 
-          {/* PRÉSENTATION */}
           <div className="register-showcase-content">
-
             <div className="register-badge">
               INTELLIGENCE ARTIFICIELLE
             </div>
@@ -155,24 +139,15 @@ function Register({ onGoToLogin }) {
             <div className="register-feature">
               Détection intelligente • Computer Vision • IA
             </div>
-
           </div>
 
-          {/* BAS DE LA PARTIE GAUCHE */}
           <div className="register-showcase-footer">
             BirdVision IA — Plateforme intelligente
             d'analyse des oiseaux
           </div>
-
         </section>
 
-        {/* ======================================
-            PARTIE DROITE
-            FORMULAIRE D'INSCRIPTION
-        ======================================= */}
-
         <section className="register-card">
-
           <span className="register-kicker">
             BIENVENUE SUR BIRDVISION IA
           </span>
@@ -184,14 +159,8 @@ function Register({ onGoToLogin }) {
             espace d'analyse intelligente.
           </p>
 
-          <form
-            className="register-form"
-            onSubmit={handleSubmit}
-          >
-
-            {/* NOM COMPLET */}
+          <form className="register-form" onSubmit={handleSubmit}>
             <div className="register-field">
-
               <label htmlFor="register-name">
                 Nom complet
               </label>
@@ -201,18 +170,13 @@ function Register({ onGoToLogin }) {
                 type="text"
                 placeholder="Votre nom complet"
                 value={name}
-                onChange={(event) =>
-                  setName(event.target.value)
-                }
+                onChange={(event) => setName(event.target.value)}
                 autoComplete="name"
                 required
               />
-
             </div>
 
-            {/* EMAIL */}
             <div className="register-field">
-
               <label htmlFor="register-email">
                 Adresse email
               </label>
@@ -222,36 +186,24 @@ function Register({ onGoToLogin }) {
                 type="email"
                 placeholder="exemple@email.com"
                 value={email}
-                onChange={(event) =>
-                  setEmail(event.target.value)
-                }
+                onChange={(event) => setEmail(event.target.value)}
                 autoComplete="email"
                 required
               />
-
             </div>
 
-            {/* MOT DE PASSE */}
             <div className="register-field">
-
               <label htmlFor="register-password">
                 Mot de passe
               </label>
 
               <div className="register-password-wrapper">
-
                 <input
                   id="register-password"
-                  type={
-                    showPassword
-                      ? "text"
-                      : "password"
-                  }
+                  type={showPassword ? "text" : "password"}
                   placeholder="Votre mot de passe"
                   value={password}
-                  onChange={(event) =>
-                    setPassword(event.target.value)
-                  }
+                  onChange={(event) => setPassword(event.target.value)}
                   autoComplete="new-password"
                   minLength={8}
                   required
@@ -260,22 +212,19 @@ function Register({ onGoToLogin }) {
                 <button
                   type="button"
                   className="register-password-toggle"
-                  onClick={() =>
-                    setShowPassword(!showPassword)
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={
+                    showPassword
+                      ? "Masquer le mot de passe"
+                      : "Afficher le mot de passe"
                   }
                 >
-                  {showPassword
-                    ? "Masquer"
-                    : "Afficher"}
+                  {showPassword ? "Masquer" : "Afficher"}
                 </button>
-
               </div>
-
             </div>
 
-            {/* CONFIRMATION */}
             <div className="register-field">
-
               <label htmlFor="register-confirm">
                 Confirmer le mot de passe
               </label>
@@ -289,32 +238,23 @@ function Register({ onGoToLogin }) {
                   setConfirmPassword(event.target.value)
                 }
                 autoComplete="new-password"
+                minLength={8}
                 required
               />
-
             </div>
 
-            {/* MESSAGE D'ERREUR */}
             {error && (
-              <div
-                className="register-error"
-                role="alert"
-              >
+              <div className="register-error" role="alert">
                 {error}
               </div>
             )}
 
-            {/* MESSAGE DE SUCCÈS */}
             {success && (
-              <div
-                className="register-success"
-                role="status"
-              >
+              <div className="register-success" role="status">
                 {success}
               </div>
             )}
 
-            {/* BOUTON INSCRIPTION */}
             <button
               className="register-submit"
               type="submit"
@@ -324,27 +264,16 @@ function Register({ onGoToLogin }) {
                 ? "Création du compte..."
                 : "Créer mon compte →"}
             </button>
-
           </form>
 
-          {/* LIEN VERS CONNEXION */}
           <div className="register-login">
+            <span>Vous avez déjà un compte ?</span>{" "}
 
-            <span>
-              Vous avez déjà un compte ?
-            </span>{" "}
-
-            <button
-              type="button"
-              onClick={onGoToLogin}
-            >
+            <button type="button" onClick={onGoToLogin}>
               Se connecter
             </button>
-
           </div>
-
         </section>
-
       </div>
     </main>
   );

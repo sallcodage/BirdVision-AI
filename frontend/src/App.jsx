@@ -75,8 +75,40 @@ const [authToken, setAuthToken] = useState(null);
 
 
   const [error, setError] = useState("");
+/* ======================================================
+   IDENTIFICATION DES ESPÈCES — BIOCLIP
+   ====================================================== */
+
+const [speciesResult, setSpeciesResult] = useState(null);
+
+const [speciesLoading, setSpeciesLoading] = useState(false);
+
+const [speciesError, setSpeciesError] = useState("");
 
   const fileInputRef = useRef(null);
+  const videoFileInputRef = useRef(null);
+  const videoTimerRef = useRef(null);
+
+
+
+  /* ======================================================
+     ONGLET ACTIF
+     ====================================================== */
+
+  const [activeTab, setActiveTab] = useState("image");
+
+
+
+  /* ======================================================
+     DÉTECTION VIDÉO
+     ====================================================== */
+
+  const [videoFile, setVideoFile] = useState(null);
+  const [videoResult, setVideoResult] = useState(null);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoError, setVideoError] = useState("");
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [videoElapsed, setVideoElapsed] = useState(0);
 
 
 
@@ -118,7 +150,11 @@ const [authToken, setAuthToken] = useState(null);
         ? "D-FINE-X"
         : selectedModel === "rfdetr-s"
           ? "RF-DETR-S"
-          : "Modèle inconnu";
+          : selectedModel === "dfine-s"
+            ? "D-FINE-S"
+            : selectedModel === "faster-rcnn"
+              ? "Faster R-CNN"
+              : "Modèle inconnu";
 
 
 
@@ -274,7 +310,7 @@ const [authToken, setAuthToken] = useState(null);
 
 
 
-  
+
 
   /* ======================================================
      SÉLECTION IMAGE
@@ -305,6 +341,8 @@ const [authToken, setAuthToken] = useState(null);
     setPreview(URL.createObjectURL(file));
     setResult(null);
     setError("");
+    setSpeciesResult(null);
+    setSpeciesError("");
   };
 
   /* ======================================================
@@ -487,6 +525,58 @@ const [authToken, setAuthToken] = useState(null);
 
 
   /* ======================================================
+     IDENTIFICATION DES ESPÈCES — BIOCLIP
+     ====================================================== */
+
+  const handleIdentifySpecies = async () => {
+    if (!image) {
+      setSpeciesError("Veuillez sélectionner une image.");
+      return;
+    }
+
+    setSpeciesLoading(true);
+    setSpeciesError("");
+    setSpeciesResult(null);
+
+    const formData = new FormData();
+    formData.append("image", image);
+
+    try {
+      const response = await fetch(
+        "http://127.0.0.1:8000/api/identify-species/",
+        {
+          method: "POST",
+          headers: { Authorization: `Token ${authToken}` },
+          body: formData,
+        }
+      );
+
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error("Le serveur a retourné une réponse invalide.");
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || "Erreur pendant l'identification.");
+      }
+
+      setSpeciesResult(data);
+    } catch (err) {
+      console.error("Erreur BioCLIP :", err);
+      setSpeciesError(
+        err instanceof TypeError
+          ? "Impossible de communiquer avec le serveur Django. Vérifiez que Django est démarré."
+          : err.message || "Une erreur est survenue pendant l'identification."
+      );
+    } finally {
+      setSpeciesLoading(false);
+    }
+  };
+
+
+  /* ======================================================
 
      NOUVELLE ANALYSE
 
@@ -517,11 +607,162 @@ const [authToken, setAuthToken] = useState(null);
 
 
     setError("");
-
-
+    setSpeciesResult(null);
+    setSpeciesError("");
+    setSpeciesLoading(false);
 
     setLoading(false);
 
+  };
+
+
+
+  /* ======================================================
+
+     SÉLECTION VIDÉO
+
+     ====================================================== */
+
+
+
+  const handleVideoChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const allowed = [
+      "video/mp4",
+      "video/avi",
+      "video/quicktime",
+      "video/x-msvideo",
+      "video/webm",
+    ];
+    if (!allowed.includes(file.type)) {
+      setVideoError(
+        "Veuillez sélectionner une vidéo MP4, AVI, MOV ou WebM."
+      );
+      return;
+    }
+    setVideoFile(file);
+    setVideoResult(null);
+    setVideoError("");
+  };
+
+
+
+  /* ======================================================
+
+     DÉTECTION VIDÉO
+
+     ====================================================== */
+
+
+
+  const handleVideoDetect = async () => {
+    if (!videoFile) {
+      setVideoError("Veuillez sélectionner une vidéo.");
+      return;
+    }
+
+    setVideoLoading(true);
+    setVideoError("");
+    setVideoResult(null);
+    setVideoProgress(0);
+    setVideoElapsed(0);
+
+    clearInterval(videoTimerRef.current);
+    videoTimerRef.current = setInterval(() => {
+      setVideoElapsed((e) => e + 1);
+    }, 1000);
+
+    const formData = new FormData();
+    formData.append("video", videoFile);
+    formData.append("confidence", confidenceThreshold.toFixed(2));
+    formData.append("model", selectedModel);
+    formData.append("frame_step", "15");
+    formData.append("max_frames", "7");
+    formData.append("async", "1");
+
+    try {
+      const response = await fetch(
+        "http://127.0.0.1:8000/api/detect-video/",
+        {
+          method: "POST",
+          headers: { Authorization: `Token ${authToken}` },
+          body: formData,
+        }
+      );
+
+      let jobData;
+      try {
+        jobData = await response.json();
+      } catch {
+        throw new Error("Le serveur a retourné une réponse invalide.");
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          jobData.error || "Erreur lors du lancement de l'analyse."
+        );
+      }
+
+      const jobId = jobData.job_id;
+      const deadline = Date.now() + 30 * 60 * 1000;
+
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 1500));
+
+        const pollRes = await fetch(
+          `http://127.0.0.1:8000/api/detect-video/${jobId}/`,
+          { headers: { Authorization: `Token ${authToken}` } }
+        );
+        const pollData = await pollRes.json();
+
+        if (pollData.progress !== undefined) {
+          setVideoProgress(pollData.progress);
+        }
+
+        if (pollData.status === "done") {
+          setVideoResult(pollData);
+          break;
+        }
+        if (pollData.status === "error") {
+          throw new Error(pollData.error || "Erreur d'analyse vidéo.");
+        }
+      }
+    } catch (err) {
+      console.error("Erreur vidéo BirdVision :", err);
+      if (err instanceof TypeError) {
+        setVideoError(
+          "Impossible de communiquer avec le serveur BirdVision."
+        );
+      } else {
+        setVideoError(
+          err.message || "Une erreur est survenue pendant l'analyse vidéo."
+        );
+      }
+    } finally {
+      clearInterval(videoTimerRef.current);
+      setVideoLoading(false);
+    }
+  };
+
+
+
+  /* ======================================================
+
+     RÉINITIALISER VIDÉO
+
+     ====================================================== */
+
+
+
+  const handleVideoReset = () => {
+    clearInterval(videoTimerRef.current);
+    setVideoFile(null);
+    setVideoResult(null);
+    setVideoError("");
+    setVideoLoading(false);
+    setVideoProgress(0);
+    setVideoElapsed(0);
   };
 
 
@@ -590,7 +831,7 @@ const [authToken, setAuthToken] = useState(null);
 
 
 
-  
+
 if (!isAuthenticated) {
   if (authPage === "home") {
     return (
@@ -808,7 +1049,7 @@ if (!isAuthenticated) {
       </header>
 
 
-      
+
 <main>
   {/* ==================================================
       HERO
@@ -1125,13 +1366,38 @@ if (!isAuthenticated) {
 
           {/* ==================================================
 
-              WORKSPACE
+              ONGLETS
 
               ================================================== */}
 
 
 
-          <div className="workspace">
+          <div className="analysis-tabs">
+            <button
+              className={`analysis-tab${activeTab === "image" ? " analysis-tab--active" : ""}`}
+              onClick={() => setActiveTab("image")}
+            >
+              Image
+            </button>
+            <button
+              className={`analysis-tab${activeTab === "video" ? " analysis-tab--active" : ""}`}
+              onClick={() => setActiveTab("video")}
+            >
+              Vidéo
+            </button>
+          </div>
+
+
+
+          {/* ==================================================
+
+              WORKSPACE IMAGE
+
+              ================================================== */}
+
+
+
+          {activeTab === "image" && <div className="workspace">
 
 
 
@@ -1544,6 +1810,14 @@ if (!isAuthenticated) {
   <option value="rfdetr-s">
     RF-DETR-S
   </option>
+
+  <option value="dfine-s">
+    D-FINE-S
+  </option>
+
+  <option value="faster-rcnn">
+    Faster R-CNN
+  </option>
 </select>
 
 
@@ -1713,6 +1987,24 @@ if (!isAuthenticated) {
 
 
 
+
+              {/* IDENTIFICATION DES ESPÈCES AVEC BIOCLIP */}
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleIdentifySpecies}
+                disabled={!image || speciesLoading || loading}
+                style={{ marginTop: "12px", width: "100%" }}
+              >
+                {speciesLoading ? (
+                  <>
+                    <span className="button-loader"></span>
+                    Identification avec BioCLIP...
+                  </>
+                ) : (
+                  "Identifier l'espèce avec BioCLIP"
+                )}
+              </button>
 
               {/* NOUVELLE ANALYSE */}
 
@@ -2286,27 +2578,321 @@ if (!isAuthenticated) {
 
               </div>
 
+              {/* IDENTIFICATION DES ESPÈCES — BIOCLIP */}
+              {speciesLoading && (
+                <div className="loading-state" style={{ marginTop: "24px" }}>
+                  <div className="scanner">
+                    <div className="scanner-circle"><span>AI</span></div>
+                    <div className="scanner-ring"></div>
+                  </div>
+                  <h4>Identification de l'espèce en cours</h4>
+                  <p>BioCLIP compare l'image aux espèces de référence.</p>
+                  <span className="loading-caption">Modèle BioCLIP ViT-B/16 · CPU</span>
+                </div>
+              )}
 
+              {!speciesLoading && speciesError && (
+                <div className="error-state" style={{ marginTop: "24px" }}>
+                  <div className="state-icon error-state-icon">!</div>
+                  <h4>Identification impossible</h4>
+                  <p>{speciesError}</p>
+                </div>
+              )}
+
+              {!speciesLoading && speciesResult?.predictions?.length > 0 && (
+                <section className="detection-details bioclip-results" style={{ marginTop: "24px" }}>
+                  {/*
+                    BioCLIP classe les espèces par score de similarité décroissant.
+                    La première proposition est affichée comme espèce principale probable,
+                    les deux suivantes comme alternatives. Ce score n'est pas une probabilité.
+                  */}
+                  {(() => {
+                    const predictions = speciesResult.predictions;
+                    const mainSpecies = predictions[0];
+                    const alternatives = predictions.slice(1, 3);
+
+                    return (
+                      <>
+                        <div className="details-heading">
+                          <div>
+                            <span className="section-kicker">ANALYSE BIOCLIP</span>
+                            <h3>Identification de l'espèce</h3>
+                          </div>
+                          <span className="detection-count">BioCLIP · Top 3</span>
+                        </div>
+
+                        <div
+                          className="detection-card bioclip-main-card"
+                          style={{
+                            border: "1px solid rgba(16, 185, 129, 0.35)",
+                            background: "linear-gradient(135deg, rgba(16, 185, 129, 0.09), rgba(255,255,255,0.96))",
+                            marginBottom: "16px",
+                            padding: "20px",
+                          }}
+                        >
+                          <div className="detection-index">01</div>
+                          <div className="detection-info">
+                            <span style={{ color: "#059669", fontWeight: 700, fontSize: "0.72rem", letterSpacing: "0.08em" }}>
+                              ESPÈCE PRINCIPALE PROBABLE
+                            </span>
+                            <strong style={{ fontSize: "1.05rem" }}>{mainSpecies.common_name}</strong>
+                            <span><em>{mainSpecies.scientific_name}</em></span>
+                            <span>Catégorie : {mainSpecies.category}</span>
+                          </div>
+                          <div className="confidence-value">
+                            <span>Score de similarité</span>
+                            <strong>{Number(mainSpecies.similarity).toFixed(3)}</strong>
+                          </div>
+                        </div>
+
+                        {alternatives.length > 0 && (
+                          <>
+                            <div className="details-heading" style={{ marginTop: "8px", marginBottom: "12px" }}>
+                              <div>
+                                <span className="section-kicker">AUTRES POSSIBILITÉS</span>
+                                <h3>Deux espèces alternatives</h3>
+                              </div>
+                            </div>
+
+                            <div className="detections-grid">
+                              {alternatives.map((item, index) => (
+                                <div className="detection-card" key={`${item.species_id}-${index + 2}`}>
+                                  <div className="detection-index">
+                                    {String(index + 2).padStart(2, "0")}
+                                  </div>
+                                  <div className="detection-info">
+                                    <strong>{item.common_name}</strong>
+                                    <span><em>{item.scientific_name}</em></span>
+                                    <span>Catégorie : {item.category}</span>
+                                  </div>
+                                  <div className="confidence-value">
+                                    <span>Score de similarité</span>
+                                    <strong>{Number(item.similarity).toFixed(3)}</strong>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
+
+                        <p className="confidence-help">
+                          BioCLIP classe les espèces selon leur similarité avec l'image. L'espèce principale est la proposition ayant le score le plus élevé ; les alternatives sont les deux suivantes. Ces scores ne sont pas des probabilités certifiées et doivent être vérifiés, notamment lorsque les valeurs sont proches.
+                        </p>
+                      </>
+                    );
+                  })()}
+                </section>
+              )}
 
             </article>
 
 
 
-          </div>
+          </div>}
 
 
+
+          {/* VIDEO WORKSPACE */}
+
+
+
+          {activeTab === "video" && (
+            <div className="workspace">
+              <article className="panel upload-panel">
+                <div className="panel-header">
+                  <div className="panel-title">
+                    <span className="step-number">01</span>
+                    <div>
+                      <span className="panel-label">VIDÉO SOURCE</span>
+                      <h3>Importer une vidéo</h3>
+                    </div>
+                  </div>
+                  <span className="file-type-badge">MP4 / AVI</span>
+                </div>
+
+                <label className={videoFile ? "drop-zone has-image" : "drop-zone"}>
+                  {videoFile ? (
+                    <div className="upload-placeholder">
+                      <div className="upload-icon"><span>&#9654;</span></div>
+                      <h4>{videoFile.name}</h4>
+                      <p>{(videoFile.size / 1024 / 1024).toFixed(1)} MB &middot; Vidéo prête</p>
+                      <span className="formats">Cliquer pour changer</span>
+                    </div>
+                  ) : (
+                    <div className="upload-placeholder">
+                      <div className="upload-icon"><span>&#9654;</span></div>
+                      <h4>Déposez votre vidéo ici</h4>
+                      <p>Cliquez pour parcourir vos fichiers et sélectionner une vidéo.</p>
+                      <span className="formats">MP4, AVI, MOV ou WebM &middot; max 30 s</span>
+                    </div>
+                  )}
+                  <input
+                    ref={videoFileInputRef}
+                    type="file"
+                    accept="video/mp4,video/avi,video/quicktime,video/x-msvideo,video/webm"
+                    onChange={handleVideoChange}
+                    disabled={videoLoading}
+                    hidden
+                  />
+                </label>
+
+                <div className="model-settings">
+                  <div className="model-settings-header">
+                    <div>
+                      <span className="panel-label">PARAMÈTRES D'ANALYSE</span>
+                      <h4>Modèle de détection</h4>
+                    </div>
+                    <span className="model-status">AI</span>
+                  </div>
+                  <div className="selected-model-info">
+                    <div className="selected-model-icon">AI</div>
+                    <div>
+                      <span>Modèle sélectionné</span>
+                      <strong>{selectedModelName}</strong>
+                    </div>
+                  </div>
+                  <p className="confidence-help">
+                    Le modèle et le seuil de confiance sont partagés avec l'onglet Image.
+                  </p>
+                </div>
+
+                <button
+                  className="primary-button"
+                  onClick={handleVideoDetect}
+                  disabled={!videoFile || videoLoading}
+                >
+                  {videoLoading ? (
+                    <><span className="button-loader"></span>Analyse vidéo avec {selectedModelName}...</>
+                  ) : (
+                    <><span className="button-spark">&#10022;</span>Analyser la vidéo avec {selectedModelName}<span className="button-arrow">&rarr;</span></>
+                  )}
+                </button>
+
+                {(videoResult || videoError) && !videoLoading && (
+                  <button className="secondary-button" onClick={handleVideoReset}>
+                    Nouvelle analyse
+                  </button>
+                )}
+              </article>
+
+              <article className="panel result-panel">
+                <div className="panel-header">
+                  <div className="panel-title">
+                    <span className="step-number">02</span>
+                    <div>
+                      <span className="panel-label">RÉSULTAT VIDÉO</span>
+                      <h3>Résultat de l'analyse</h3>
+                    </div>
+                  </div>
+                  {videoResult ? (
+                    <span className="complete-badge"><span>&#10003;</span>Terminée</span>
+                  ) : (
+                    <span className="waiting-badge">En attente</span>
+                  )}
+                </div>
+
+                <div className="result-view">
+                  {videoLoading && (
+                    <div className="loading-state">
+                      <div className="scanner">
+                        <div className="scanner-circle"><span>AI</span></div>
+                        <div className="scanner-ring"></div>
+                      </div>
+                      <h4>Analyse vidéo en cours</h4>
+                      <p>{selectedModelName} analyse votre vidéo image par image.</p>
+                      <div className="progress-track">
+                        <div className="progress-bar" style={{ width: Math.round(videoProgress * 100) + "%" }}></div>
+                      </div>
+                      <span className="loading-caption">
+                        {Math.round(videoProgress * 100)} %
+                        {" · "}
+                        {Math.floor(videoElapsed / 60)}:{String(videoElapsed % 60).padStart(2, "0")}
+                      </span>
+                    </div>
+                  )}
+                  {!videoLoading && videoError && (
+                    <div className="error-state">
+                      <div className="state-icon error-state-icon">!</div>
+                      <h4>Analyse impossible</h4>
+                      <p>{videoError}</p>
+                    </div>
+                  )}
+                  {!videoLoading && !videoError && !videoResult && (
+                    <div className="empty-state">
+                      <div className="empty-visual">
+                        <div className="focus-corner corner-one"></div>
+                        <div className="focus-corner corner-two"></div>
+                        <div className="focus-corner corner-three"></div>
+                        <div className="focus-corner corner-four"></div>
+                        <span>&#9654;</span>
+                      </div>
+                      <h4>Prêt pour l'analyse vidéo</h4>
+                      <p>Sélectionnez une vidéo et lancez l'analyse. Les résultats apparaîtront ici.</p>
+                    </div>
+                  )}
+                  {!videoLoading && !videoError && videoResult && (
+                    <div className="result-message success-result">
+                      <div className="result-message-icon">&#10003;</div>
+                      <div>
+                        <strong>Vidéo analysée avec succès</strong>
+                        <span>
+                          {videoResult.total_bird_detections} détection(s) &middot; max {videoResult.max_birds_in_frame} oiseau(x)/image &middot; {videoResult.frames_analyzed}/{videoResult.frames_total} images analysées avec {selectedModelName}.
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </article>
+            </div>
+          )}
+
+
+
+          {/* VIDEO STATS */}
+          {activeTab === "video" && videoResult && (
+            <div className="stats-grid">
+              <div className="stat-card">
+                <div className="stat-icon">01</div>
+                <div>
+                  <span>Max oiseaux / image</span>
+                  <strong>{videoResult.max_birds_in_frame ?? "—"}</strong>
+                </div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-icon">&Sigma;</div>
+                <div>
+                  <span>Détections totales</span>
+                  <strong>{videoResult.total_bird_detections ?? "—"}</strong>
+                </div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-icon">AI</div>
+                <div>
+                  <span>Modèle IA</span>
+                  <strong>{selectedModelName}</strong>
+                </div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-icon">{videoResult.frames_analyzed}</div>
+                <div>
+                  <span>Images analysées</span>
+                  <strong>{videoResult.frames_analyzed} / {videoResult.frames_total}</strong>
+                </div>
+              </div>
+            </div>
+          )}
 
 
 
           {/* ==================================================
 
-              STATISTIQUES
+              STATISTIQUES IMAGE
 
               ================================================== */}
 
 
 
-          <div className="stats-grid">
+          {activeTab === "image" && <div className="stats-grid">
 
 
 
@@ -2500,7 +3086,7 @@ if (!isAuthenticated) {
 
 
 
-          </div>
+          </div>}
 
 
 
@@ -2514,9 +3100,7 @@ if (!isAuthenticated) {
 
 
 
-          {result?.detections?.length >
-
-            0 && (
+          {activeTab === "image" && result?.detections?.length > 0 && (
 
 
 
@@ -2712,6 +3296,8 @@ if (!isAuthenticated) {
 
             </section>
 
+
+
           )}
 
 
@@ -2803,6 +3389,22 @@ if (!isAuthenticated) {
 
             <span>
 
+              D-FINE-S
+
+            </span>
+
+
+
+            <span>
+
+              Faster R-CNN
+
+            </span>
+
+
+
+            <span>
+
               Django REST
 
             </span>
@@ -2874,7 +3476,7 @@ if (!isAuthenticated) {
     </div>
 
     <p>
-      BirdVision IA • RT-DETR-X • YOLO26s • D-FINE-X • RF-DETR-S
+      BirdVision IA • RT-DETR-X • YOLO26s • D-FINE-X • RF-DETR-S • D-FINE-S • Faster R-CNN
     </p>
 
     </div>
@@ -2884,3 +3486,4 @@ if (!isAuthenticated) {
 }
 
 export default App;
+

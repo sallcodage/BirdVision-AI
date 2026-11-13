@@ -81,10 +81,26 @@ key.properties
 # =========================
 Thumbs.db
 Desktop.ini
-
 # =========================
 # Fichiers temporaires
 # =========================
 *.tmp
 *.bak
 *.swp
+
+# =========================
+# IDE / sorties d'entrainement
+# =========================
+.idea/
+
+# =========================
+# Environnement virtuel Python
+# =========================
+myenv/
+
+# =========================
+# Flutter / Dart
+# =========================
+birdvision_app/.dart_tool/
+rfdetr_app/android/build/
+**/.dart_tool/chrome-device/

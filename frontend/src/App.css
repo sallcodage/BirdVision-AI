@@ -2668,3 +2668,40 @@ a {
     align-items: center;
   }
 }
+
+/* =========================================================
+   ONGLETS ANALYSE (Image / Vidéo / Historique)
+   ========================================================= */
+
+.analysis-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+
+.analysis-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border-radius: 50px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--white);
+  color: var(--text-soft);
+  border: 1.5px solid var(--border);
+  transition: all 0.18s ease;
+}
+
+.analysis-tab:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.analysis-tab--active {
+  background: var(--blue);
+  color: var(--white);
+  border-color: var(--blue);
+}
