@@ -1,0 +1,22 @@
+﻿species_id,common_name,scientific_name,category
+0,Heron garde-boeufs,Ardea ibis,sauvage
+1,Corbeau pie,Corvus albus,sauvage
+2,Milan noir,Milvus migrans,sauvage
+3,Calao a bec noir,Lophoceros nasutus,sauvage
+4,Pintade de Numidie,Numida meleagris,domestique_et_sauvage
+5,Pigeon biset,Columba livia,domestique_et_sauvage
+6,Pigeon roussard,Columba guinea,sauvage
+7,Tourterelle maillee,Spilopelia senegalensis,sauvage
+8,Poule domestique,Gallus gallus domesticus,domestique
+9,Canard de Barbarie,Cairina moschata,domestique
+10,Canard colvert,Anas platyrhynchos,sauvage
+11,Oie armee de Gambie,Plectropterus gambensis,sauvage
+12,Dendrocygne veuf,Dendrocygna viduata,sauvage
+13,Heron cendre,Ardea cinerea,sauvage
+14,Heron melanocéphale,Ardea melanocephala,sauvage
+15,Ibis sacre,Threskiornis aethiopicus,sauvage
+16,Tisserin gendarme,Ploceus cucullatus,sauvage
+17,Capucin bec-de-plomb,Euodice cantans,sauvage
+18,Amarante du Senegal,Lagonosticta senegala,sauvage
+19,Vanneau eperonne,Vanellus spinosus,sauvage
+20,Youyou du Senegal,Poicephalus senegalus,sauvage

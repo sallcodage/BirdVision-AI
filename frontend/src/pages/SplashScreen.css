@@ -1,0 +1,254 @@
+/* =========================================================
+   BIRDVISION IA — SPLASH SCREEN
+   Logo + titre animé
+   ========================================================= */
+
+.splash-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+
+  width: 100%;
+  min-height: 100vh;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  overflow: hidden;
+
+  background:
+    radial-gradient(
+      circle at center,
+      #0b3552 0%,
+      #061f33 45%,
+      #020e19 100%
+    );
+
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+}
+
+/* =========================================================
+   LÉGER EFFET LUMINEUX
+   ========================================================= */
+
+.splash-screen::before {
+  content: "";
+
+  position: absolute;
+
+  width: 500px;
+  height: 500px;
+
+  border-radius: 50%;
+
+  background:
+    radial-gradient(
+      circle,
+      rgba(34, 211, 238, 0.14) 0%,
+      rgba(14, 165, 233, 0.06) 40%,
+      transparent 70%
+    );
+
+  animation: backgroundPulse 3s ease-in-out infinite;
+}
+
+/* =========================================================
+   CONTENU CENTRAL
+   ========================================================= */
+
+.splash-center {
+  position: relative;
+  z-index: 2;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  text-align: center;
+}
+
+/* =========================================================
+   LOGO
+   ========================================================= */
+
+.splash-logo {
+  width: 145px;
+  height: 145px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  overflow: hidden;
+
+  border-radius: 32px;
+
+  background: #ffffff;
+
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.35),
+    0 0 50px rgba(34, 211, 238, 0.20);
+
+  opacity: 0;
+
+  animation:
+    logoEntrance 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+    logoFloat 2.5s ease-in-out 1.2s infinite;
+}
+
+.splash-logo img {
+  width: 100%;
+  height: 100%;
+
+  object-fit: contain;
+}
+
+/* =========================================================
+   TITRE
+   ========================================================= */
+
+.splash-title {
+  margin: 25px 0 0;
+
+  color: #ffffff;
+
+  font-size: clamp(38px, 5vw, 56px);
+  font-weight: 800;
+
+  line-height: 1;
+
+  letter-spacing: -2px;
+
+  opacity: 0;
+
+  transform: translateY(25px);
+
+  text-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.30);
+
+  animation:
+    titleEntrance 1s ease 0.65s forwards;
+}
+
+.splash-title span {
+  background:
+    linear-gradient(
+      90deg,
+      #38bdf8,
+      #22d3ee,
+      #8befff
+    );
+
+  background-clip: text;
+  -webkit-background-clip: text;
+
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* =========================================================
+   ANIMATION DU LOGO
+   ========================================================= */
+
+@keyframes logoEntrance {
+  0% {
+    opacity: 0;
+    transform:
+      scale(0.55)
+      rotate(-8deg);
+  }
+
+  65% {
+    opacity: 1;
+    transform:
+      scale(1.08)
+      rotate(2deg);
+  }
+
+  100% {
+    opacity: 1;
+    transform:
+      scale(1)
+      rotate(0deg);
+  }
+}
+
+/* =========================================================
+   LOGO QUI FLOTTE LÉGÈREMENT
+   ========================================================= */
+
+@keyframes logoFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+/* =========================================================
+   ANIMATION DU TITRE
+   ========================================================= */
+
+@keyframes titleEntrance {
+  0% {
+    opacity: 0;
+
+    transform:
+      translateY(25px)
+      scale(0.96);
+  }
+
+  100% {
+    opacity: 1;
+
+    transform:
+      translateY(0)
+      scale(1);
+  }
+}
+
+/* =========================================================
+   LUMIÈRE DU FOND
+   ========================================================= */
+
+@keyframes backgroundPulse {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 600px) {
+  .splash-logo {
+    width: 115px;
+    height: 115px;
+
+    border-radius: 26px;
+  }
+
+  .splash-title {
+    margin-top: 21px;
+
+    font-size: 38px;
+  }
+
+  .splash-screen::before {
+    width: 350px;
+    height: 350px;
+  }
+}
