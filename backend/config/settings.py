@@ -20,9 +20,16 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
     raise ValueError("DJANGO_SECRET_KEY est absente du fichier .env")
 
-DEBUG = True
+DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("true", "1", "yes")
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"] if DEBUG else []
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv(
+        "DJANGO_ALLOWED_HOSTS",
+        "localhost,127.0.0.1",
+    ).split(",")
+    if host.strip()
+]
 
 
 # ============================================================
@@ -99,12 +106,40 @@ WSGI_APPLICATION = "config.wsgi.application"
 # BASE DE DONNÉES
 # ============================================================
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+DB_ENGINE = os.getenv("DB_ENGINE", "sqlite").lower()
+
+if DB_ENGINE == "postgresql":
+    required_db_variables = ("DB_NAME", "DB_USER", "DB_PASSWORD", "DB_HOST")
+    missing_db_variables = [
+        variable for variable in required_db_variables if not os.getenv(variable)
+    ]
+
+    if missing_db_variables:
+        raise ValueError(
+            "Variables PostgreSQL manquantes : "
+            + ", ".join(missing_db_variables)
+        )
+
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("DB_NAME"),
+            "USER": os.getenv("DB_USER"),
+            "PASSWORD": os.getenv("DB_PASSWORD"),
+            "HOST": os.getenv("DB_HOST"),
+            "PORT": os.getenv("DB_PORT", "5432"),
+            "CONN_MAX_AGE": 600,
+        }
     }
-}
+elif DB_ENGINE == "sqlite":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
+else:
+    raise ValueError("DB_ENGINE invalide. Utilisez 'sqlite' ou 'postgresql'.")
 
 
 # ============================================================
@@ -192,6 +227,12 @@ CORS_ALLOWED_ORIGINS = [
     # Flutter Web
     "http://localhost:5176",
     "http://127.0.0.1:5176",
+]
+
+CORS_ALLOWED_ORIGINS += [
+    origin.strip()
+    for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
 ]
 
 

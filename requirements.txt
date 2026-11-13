@@ -48,3 +48,4 @@ urllib3==2.8.0
 open-clip-torch==4.2.1
 groq==1.7.0
 python-dotenv==1.2.4
+psycopg[binary]==3.3.9

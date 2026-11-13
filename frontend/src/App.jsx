@@ -91,17 +91,59 @@ const [speciesError, setSpeciesError] = useState("");
 
 
 
+
   /* ======================================================
      ONGLET ACTIF
      ====================================================== */
 
   const [activeTab, setActiveTab] = useState("image");
 
+  /* ======================================================
+     HISTORIQUE DES DÉTECTIONS
+     ====================================================== */
 
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+
+  const fetchHistory = async () => {
+    setHistoryLoading(true);
+    setHistoryError("");
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/history/`,
+        {
+          headers: authToken ? { Authorization: `Token ${authToken}` } : {},
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Erreur serveur");
+      }
+
+      setHistory(data.history || []);
+    } catch (error) {
+      setHistoryError(
+        error.message || "Impossible de charger l'historique."
+      );
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated && activeTab === "historique") {
+      fetchHistory();
+    }
+  }, [activeTab, isAuthenticated]);
 
   /* ======================================================
      DÉTECTION VIDÉO
      ====================================================== */
+
 
   const [videoFile, setVideoFile] = useState(null);
   const [videoResult, setVideoResult] = useState(null);
@@ -1372,20 +1414,29 @@ if (!isAuthenticated) {
 
 
 
-          <div className="analysis-tabs">
-            <button
-              className={`analysis-tab${activeTab === "image" ? " analysis-tab--active" : ""}`}
-              onClick={() => setActiveTab("image")}
-            >
-              Image
-            </button>
-            <button
-              className={`analysis-tab${activeTab === "video" ? " analysis-tab--active" : ""}`}
-              onClick={() => setActiveTab("video")}
-            >
-              Vidéo
-            </button>
-          </div>
+
+<div className="analysis-tabs">
+  <button
+    className={`analysis-tab${activeTab === "image" ? " analysis-tab--active" : ""}`}
+    onClick={() => setActiveTab("image")}
+  >
+    Image
+  </button>
+
+  <button
+    className={`analysis-tab${activeTab === "video" ? " analysis-tab--active" : ""}`}
+    onClick={() => setActiveTab("video")}
+  >
+    Vidéo
+  </button>
+
+  <button
+    className={`analysis-tab${activeTab === "historique" ? " analysis-tab--active" : ""}`}
+    onClick={() => setActiveTab("historique")}
+  >
+    Historique
+  </button>
+</div>
 
 
 
@@ -2846,7 +2897,104 @@ if (!isAuthenticated) {
             </div>
           )}
 
+          {/* ==================================================
+              HISTORIQUE DES DÉTECTIONS
+              ================================================== */}
 
+          {activeTab === "historique" && (
+            <div className="workspace" style={{ display: "block" }}>
+              <article className="panel" style={{ width: "100%" }}>
+                <div className="panel-header">
+                  <div className="panel-title">
+                    <span className="step-number">H</span>
+                    <div>
+                      <span className="panel-label">
+                        BASE DE DONNÉES COMMUNE
+                      </span>
+                      <h3>Historique des détections</h3>
+                    </div>
+                  </div>
+
+                  <button
+                    className="secondary-button"
+                    onClick={fetchHistory}
+                    disabled={historyLoading}
+                    style={{ padding: "6px 14px", fontSize: "13px" }}
+                  >
+                    {historyLoading ? "Chargement..." : "Actualiser"}
+                  </button>
+                </div>
+
+                {historyError && (
+                  <p style={{ color: "red", padding: "15px" }}>
+                    {historyError}
+                  </p>
+                )}
+
+                {historyLoading && (
+                  <p style={{ padding: "15px" }}>
+                    Chargement de l'historique...
+                  </p>
+                )}
+
+                {!historyLoading && !historyError && history.length === 0 && (
+                  <p style={{ padding: "20px" }}>
+                    Aucune détection enregistrée pour le moment.
+                  </p>
+                )}
+
+                {history.length > 0 && (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Modèle IA</th>
+                          <th>Oiseaux détectés</th>
+                          <th>Seuil de confiance</th>
+                          <th>Date</th>
+                          <th>Image</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {history.map((entry) => (
+                          <tr key={entry.id}>
+                            <td>{entry.id}</td>
+                            <td>{entry.model || "—"}</td>
+                            <td>{entry.bird_count ?? "—"}</td>
+                            <td>
+                              {entry.confidence_threshold != null
+                                ? `${Math.round(entry.confidence_threshold * 100)} %`
+                                : "—"}
+                            </td>
+                            <td>
+                              {entry.created_at
+                                ? new Date(entry.created_at).toLocaleString("fr-FR")
+                                : "—"}
+                            </td>
+                            <td>
+                              {entry.result_image ? (
+                                <a
+                                  href={entry.result_image}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Voir l'image
+                                </a>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </article>
+            </div>
+          )}
 
           {/* VIDEO STATS */}
           {activeTab === "video" && videoResult && (
