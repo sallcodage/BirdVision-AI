@@ -112,8 +112,8 @@ const [speciesError, setSpeciesError] = useState("");
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/history/`,
-        {
+  `${import.meta.env.VITE_API_URL}/api/history/`,
+  {
           headers: authToken ? { Authorization: `Token ${authToken}` } : {},
         }
       );
@@ -470,7 +470,7 @@ const [speciesError, setSpeciesError] = useState("");
     try {
 
       const response = await fetch(
-  "http://127.0.0.1:8000/api/detect/",
+  `${import.meta.env.VITE_API_URL}/api/detect/`,
   {
     method: "POST",
 
@@ -585,7 +585,7 @@ const [speciesError, setSpeciesError] = useState("");
 
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/api/identify-species/",
+        `${import.meta.env.VITE_API_URL}/api/identify-species/`,
         {
           method: "POST",
           headers: { Authorization: `Token ${authToken}` },
@@ -725,7 +725,7 @@ const [speciesError, setSpeciesError] = useState("");
 
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/api/detect-video/",
+        `${import.meta.env.VITE_API_URL}/api/detect-video/`,
         {
           method: "POST",
           headers: { Authorization: `Token ${authToken}` },
@@ -753,7 +753,7 @@ const [speciesError, setSpeciesError] = useState("");
         await new Promise((r) => setTimeout(r, 1500));
 
         const pollRes = await fetch(
-          `http://127.0.0.1:8000/api/detect-video/${jobId}/`,
+          `${import.meta.env.VITE_API_URL}/api/detect-video/${jobId}/`,
           { headers: { Authorization: `Token ${authToken}` } }
         );
         const pollData = await pollRes.json();

@@ -17,3 +17,4 @@ imageio-ffmpeg==0.6.0
 groq==1.7.0
 requests==2.34.2
 psycopg[binary]==3.3.9
+open-clip-torch==4.2.1
